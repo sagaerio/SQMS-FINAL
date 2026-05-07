@@ -17,29 +17,36 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ServiceSelection } from '../components/ServiceSelection';
 import type { Service } from '../components/ServiceSelection';
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const [userRole, setUserRole] = useState('customer');
+  const { user, loading } = useAuth();
   const [showServiceSelection, setShowServiceSelection] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const { industry } = useIndustry();
 
   useEffect(() => {
-    const role = localStorage.getItem('sqms_user_role') || 'customer';
-    setUserRole(role);
+    // Wait for auth to finish loading
+    if (loading) return;
+
+    // Redirect to login if not authenticated
+    if (!user) {
+      navigate('/login');
+      return;
+    }
 
     // Always show service selection for customers on login
-    if (role === 'customer') {
+    if (user.role === 'customer') {
       const savedService = localStorage.getItem('sqms_selected_service');
       if (savedService) {
         setSelectedService(JSON.parse(savedService));
       }
       setShowServiceSelection(true);
     }
-  }, []);
+  }, [user, loading, navigate]);
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
@@ -174,10 +181,10 @@ export function Dashboard() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl text-slate-800 mb-3">
-            {userRole === 'customer' ? 'Welcome to SQMS' : 'Dashboard'}
+            {user?.role === 'customer' ? `Welcome, ${user?.full_name}` : 'Dashboard'}
           </h1>
           <p className="text-xl text-slate-600">
-            {userRole === 'customer'
+            {user?.role === 'customer'
               ? 'Your time is valuable. We help you skip the wait.'
               : 'Smart Queue Management System'}
           </p>
@@ -190,7 +197,7 @@ export function Dashboard() {
                 <span className="text-slate-700">{industry.name}</span>
               </div>
             )}
-            {userRole === 'customer' && selectedService && (
+            {user?.role === 'customer' && selectedService && (
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
                 <Briefcase className="w-4 h-4 text-blue-600" />
                 <span className="text-slate-700">{selectedService.name}</span>
@@ -198,7 +205,7 @@ export function Dashboard() {
                   onClick={() => setShowServiceSelection(true)}
                   className="ml-2 text-xs text-blue-600 hover:underline"
                 >
-                  Change
+                  Change Service
                 </button>
               </div>
             )}
@@ -206,7 +213,7 @@ export function Dashboard() {
         </div>
 
         {/* Customer Features or Menu Grid */}
-        {userRole === 'customer' ? (
+        {user?.role === 'customer' ? (
           <>
             {/* Customer Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -270,7 +277,7 @@ export function Dashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {menuItems.filter(item => {
               if (!item.roles) return true;
-              return item.roles.includes(userRole);
+              return user?.role && item.roles.includes(user.role);
             }).map((item) => {
               const Icon = item.icon;
               return (

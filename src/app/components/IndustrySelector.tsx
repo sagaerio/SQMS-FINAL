@@ -79,8 +79,8 @@ export function IndustrySelector({ onSelect, onClose, showClose = false }: Indus
         <div className="p-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-3xl text-slate-800 mb-2">Choose a Business</h2>
-              <p className="text-slate-600">Pick a service that makes your day simpler</p>
+              <h2 className="text-3xl text-slate-800 mb-2">Choose Your Industry</h2>
+              <p className="text-slate-600">Select the industry you need service from</p>
             </div>
             {showClose && onClose && (
               <button

@@ -2,8 +2,18 @@ import { useState, useEffect } from 'react';
 import { Calendar as CalendarIcon, Clock, User, Building2, CheckCircle, Plus, X, ArrowLeft, Hash, Check, UserCheck } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { QueueStatusBar } from '../components/QueueStatusBar';
+import { DatePicker } from '../components/DatePicker';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { industryServices, industryBranches } from '../data/industryServices';
+import {
+  createAppointment,
+  getCustomerAppointments,
+  updateAppointmentStatus,
+  cancelAppointment as cancelSupabaseAppointment,
+  getServicesByIndustry
+} from '../../services/queueService';
+import type { Appointment as SupabaseAppointment, Service } from '../../lib/supabase';
 
 interface Appointment {
   id: string;
@@ -11,177 +21,280 @@ interface Appointment {
   time: string;
   service: string;
   branch: string;
-  status: 'upcoming' | 'confirmed' | 'served' | 'cancelled';
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
   customerName: string;
   ticketNumber?: string;
 }
 
-const mockAppointments: Appointment[] = [
-  {
-    id: '1',
-    date: '2026-03-20',
-    time: '10:00 AM',
-    service: 'Account Opening',
-    branch: 'New York - Manhattan',
-    status: 'upcoming',
-    customerName: 'John Doe'
-  },
-  {
-    id: '2',
-    date: '2026-03-22',
-    time: '2:30 PM',
-    service: 'Loan Services',
-    branch: 'Los Angeles - Downtown',
-    status: 'upcoming',
-    customerName: 'Jane Smith'
-  },
-];
-
 const timeSlots = [
-  '9:00 AM', '9:30 AM', '10:00 AM', '10:30 AM', '11:00 AM', '11:30 AM',
-  '12:00 PM', '12:30 PM', '1:00 PM', '1:30 PM', '2:00 PM', '2:30 PM',
-  '3:00 PM', '3:30 PM', '4:00 PM', '4:30 PM'
+  '09:00', '09:30', '10:00', '10:30', '11:00', '11:30',
+  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
+  '15:00', '15:30', '16:00', '16:30'
 ];
 
 export function Appointments() {
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const { industry } = useIndustry();
-  const [appointments, setAppointments] = useState<Appointment[]>(mockAppointments);
+  const [appointments, setAppointments] = useState<SupabaseAppointment[]>([]);
   const [showBooking, setShowBooking] = useState(false);
-  const [userRole, setUserRole] = useState('customer');
   const [selectedServiceForView, setSelectedServiceForView] = useState<string | null>(null);
-  const [services, setServices] = useState<any[]>([]);
+  const [services, setServices] = useState<Service[]>([]);
   const [branches, setBranches] = useState<string[]>([]);
-  const [rescheduleAppointment, setRescheduleAppointment] = useState<Appointment | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [rescheduleAppointment, setRescheduleAppointment] = useState<SupabaseAppointment | null>(null);
   const [formData, setFormData] = useState({
-    customerName: '',
+    customerName: user?.full_name || '',
     service: '',
     branch: '',
     date: '',
-    time: ''
+    time: '',
+    notes: ''
   });
 
-  // Set industry-specific services and branches
+  // Update customer name when user loads
+  useEffect(() => {
+    if (user && !formData.customerName) {
+      setFormData(prev => ({ ...prev, customerName: user.full_name }));
+    }
+  }, [user]);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/login');
+    }
+  }, [user, authLoading, navigate]);
+
+  // Load services from Supabase
   useEffect(() => {
     if (!industry) return;
 
-    const industryKey = industry.id as keyof typeof industryServices;
-    const servicesData = industryServices[industryKey] || industryServices.banking;
-    const branchesData = industryBranches[industryKey] || industryBranches.banking;
+    const loadServices = async () => {
+      const { data } = await getServicesByIndustry(industry.id);
+      if (data) {
+        setServices(data);
+      }
+    };
 
-    setServices(servicesData);
+    loadServices();
+
+    // Still use mock branches for now
+    const industryKey = industry.id as keyof typeof industryBranches;
+    const branchesData = industryBranches[industryKey] || industryBranches.banking;
     setBranches(branchesData);
   }, [industry]);
 
+  // Load appointments from Supabase
   useEffect(() => {
-    const role = localStorage.getItem('sqms_user_role') || 'customer';
-    const staffIndustry = localStorage.getItem('sqms_staff_industry') || '';
-    setUserRole(role);
+    if (!user) return;
 
-    // Load appointments and filter by industry for staff
-    const storedAppointments = JSON.parse(localStorage.getItem('sqms_appointments') || '[]');
+    const loadAppointments = async () => {
+      setLoading(true);
+      const { data, error } = await getCustomerAppointments(user.id);
 
-    if (role === 'staff' && staffIndustry) {
-      // Filter appointments by staff's industry
-      const filteredAppointments = storedAppointments.filter((apt: any) => apt.industry === staffIndustry);
-      setAppointments(filteredAppointments.length > 0 ? filteredAppointments : mockAppointments);
-    } else {
-      setAppointments(storedAppointments.length > 0 ? storedAppointments : mockAppointments);
-    }
-  }, []);
+      if (data) {
+        // Add demo appointments to show slot blocking functionality
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-  const isStaffOrAdmin = userRole === 'staff' || userRole === 'admin';
-  const isCustomer = userRole === 'customer';
+        const dayAfterTomorrow = new Date();
+        dayAfterTomorrow.setDate(dayAfterTomorrow.getDate() + 2);
+        const dayAfterTomorrowStr = dayAfterTomorrow.toISOString().split('T')[0];
 
-  const handleBookAppointment = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newAppointment: Appointment = {
-      id: String(Date.now()),
-      date: formData.date,
-      time: formData.time,
-      service: formData.service,
-      branch: formData.branch,
-      status: 'upcoming',
-      customerName: formData.customerName
+        // Create demo booked appointments for demonstration
+        const demoAppointments: SupabaseAppointment[] = [
+          {
+            id: 'demo-1',
+            customer_id: 'demo-customer-1',
+            industry_id: industry?.id || 'banking',
+            service_id: services[0]?.id || 'service-1',
+            appointment_date: tomorrowStr,
+            appointment_time: '09:00',
+            status: 'scheduled',
+            notes: 'Demo appointment',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as any,
+          {
+            id: 'demo-2',
+            customer_id: 'demo-customer-2',
+            industry_id: industry?.id || 'banking',
+            service_id: services[0]?.id || 'service-1',
+            appointment_date: tomorrowStr,
+            appointment_time: '10:00',
+            status: 'confirmed',
+            notes: 'Demo appointment',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as any,
+          {
+            id: 'demo-3',
+            customer_id: 'demo-customer-3',
+            industry_id: industry?.id || 'banking',
+            service_id: services[1]?.id || 'service-2',
+            appointment_date: dayAfterTomorrowStr,
+            appointment_time: '14:00',
+            status: 'scheduled',
+            notes: 'Demo appointment',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as any,
+          {
+            id: 'demo-4',
+            customer_id: 'demo-customer-4',
+            industry_id: industry?.id || 'banking',
+            service_id: services[0]?.id || 'service-1',
+            appointment_date: dayAfterTomorrowStr,
+            appointment_time: '15:00',
+            status: 'confirmed',
+            notes: 'Demo appointment',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          } as any
+        ];
+
+        // Combine user appointments with demo appointments
+        setAppointments([...data, ...demoAppointments]);
+      }
+      setLoading(false);
     };
-    const updatedAppointments = [...appointments, newAppointment];
-    setAppointments(updatedAppointments);
 
-    // Save to localStorage
-    localStorage.setItem('sqms_appointments', JSON.stringify(updatedAppointments));
+    loadAppointments();
+  }, [user, services, industry]);
+
+  const isStaffOrAdmin = user?.role === 'staff' || user?.role === 'admin';
+  const isCustomer = user?.role === 'customer';
+
+  const handleBookAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !industry) return;
+
+    setSubmitting(true);
+
+    const selectedService = services.find(s => s.name === formData.service);
+    if (!selectedService) {
+      alert('Please select a valid service');
+      setSubmitting(false);
+      return;
+    }
+
+    const { data, error } = await createAppointment(
+      user.id,
+      industry.id,
+      selectedService.id,
+      formData.date,
+      formData.time,
+      formData.notes
+    );
+
+    if (error) {
+      alert('Failed to book appointment. Please try again.');
+      setSubmitting(false);
+      return;
+    }
+
+    // Reload appointments
+    const result = await getCustomerAppointments(user.id);
+    if (result.data) {
+      setAppointments(result.data);
+    }
 
     setShowBooking(false);
+    setSubmitting(false);
     setFormData({
       customerName: '',
       service: '',
       branch: '',
       date: '',
-      time: ''
+      time: '',
+      notes: ''
     });
+
+    alert('Appointment booked successfully!');
   };
 
-  const confirmAppointment = (id: string) => {
-    const updatedAppointments = appointments.map(apt =>
-      apt.id === id ? { ...apt, status: 'confirmed' as const } : apt
-    );
-    setAppointments(updatedAppointments);
-    localStorage.setItem('sqms_appointments', JSON.stringify(updatedAppointments));
+  const confirmAppointment = async (id: string) => {
+    const { error } = await updateAppointmentStatus(id, 'confirmed');
+    if (error) {
+      alert('Failed to confirm appointment');
+      return;
+    }
+
+    // Reload appointments
+    if (user) {
+      const result = await getCustomerAppointments(user.id);
+      if (result.data) {
+        setAppointments(result.data);
+      }
+    }
   };
 
-  const markAsServed = (id: string) => {
-    const updatedAppointments = appointments.map(apt =>
-      apt.id === id ? { ...apt, status: 'served' as const } : apt
-    );
-    setAppointments(updatedAppointments);
-    localStorage.setItem('sqms_appointments', JSON.stringify(updatedAppointments));
+  const markAsServed = async (id: string) => {
+    const { error } = await updateAppointmentStatus(id, 'completed');
+    if (error) {
+      alert('Failed to mark as served');
+      return;
+    }
+
+    // Reload appointments
+    if (user) {
+      const result = await getCustomerAppointments(user.id);
+      if (result.data) {
+        setAppointments(result.data);
+      }
+    }
   };
 
-  const cancelAppointment = (id: string) => {
-    const updatedAppointments = appointments.map(apt =>
-      apt.id === id ? { ...apt, status: 'cancelled' as const } : apt
-    );
-    setAppointments(updatedAppointments);
-    localStorage.setItem('sqms_appointments', JSON.stringify(updatedAppointments));
+  const cancelAppointment = async (id: string) => {
+    const confirmed = window.confirm('Are you sure you want to cancel this appointment?');
+    if (!confirmed) return;
+
+    const { error } = await cancelSupabaseAppointment(id);
+    if (error) {
+      alert('Failed to cancel appointment');
+      return;
+    }
+
+    // Reload appointments
+    if (user) {
+      const result = await getCustomerAppointments(user.id);
+      if (result.data) {
+        setAppointments(result.data);
+      }
+    }
+
+    alert('Appointment cancelled successfully');
   };
 
-  const handleReschedule = (appointment: Appointment) => {
+  const handleReschedule = (appointment: SupabaseAppointment) => {
     setRescheduleAppointment(appointment);
+    const service = services.find(s => s.id === appointment.service_id);
     setFormData({
-      customerName: appointment.customerName,
-      service: appointment.service,
-      branch: appointment.branch,
-      date: appointment.date,
-      time: appointment.time
+      customerName: user?.full_name || '',
+      service: service?.name || '',
+      branch: '',
+      date: appointment.appointment_date,
+      time: appointment.appointment_time,
+      notes: appointment.notes || ''
     });
     setShowBooking(true);
   };
 
-  const handleRescheduleSubmit = (e: React.FormEvent) => {
+  const handleRescheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!rescheduleAppointment) return;
 
-    setAppointments(appointments.map(apt =>
-      apt.id === rescheduleAppointment.id
-        ? {
-            ...apt,
-            date: formData.date,
-            time: formData.time,
-            service: formData.service,
-            branch: formData.branch,
-            customerName: formData.customerName
-          }
-        : apt
-    ));
+    // For now, cancel old and create new
+    await cancelSupabaseAppointment(rescheduleAppointment.id);
+    await handleBookAppointment(e);
 
-    setShowBooking(false);
     setRescheduleAppointment(null);
-    setFormData({
-      customerName: '',
-      service: '',
-      branch: '',
-      date: '',
-      time: ''
-    });
-    alert('Appointment rescheduled successfully!');
   };
 
   const formatDate = (dateString: string) => {
@@ -200,24 +313,44 @@ export function Appointments() {
   };
 
   const filteredAppointments = isCustomer
-    ? appointments.filter(apt => isFutureAppointment(apt.date, apt.time))
+    ? appointments.filter(apt => isFutureAppointment(apt.appointment_date, apt.appointment_time))
     : appointments;
 
-  const getStatusColor = (status: Appointment['status']) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
-      case 'upcoming':
+      case 'scheduled':
         return 'bg-blue-100 text-blue-800 border-blue-300';
       case 'confirmed':
         return 'bg-green-100 text-green-800 border-green-300';
-      case 'served':
+      case 'completed':
         return 'bg-purple-100 text-purple-800 border-purple-300';
       case 'cancelled':
         return 'bg-red-100 text-red-800 border-red-300';
+      default:
+        return 'bg-slate-100 text-slate-800 border-slate-300';
     }
   };
 
-  const navigate = useNavigate();
+  const formatTime = (timeString: string) => {
+    const [hours, minutes] = timeString.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+    return `${displayHour}:${minutes} ${ampm}`;
+  };
+
   const IndustryIcon = industry?.icon;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <CalendarIcon className="w-12 h-12 text-blue-600 animate-pulse mx-auto mb-4" />
+          <p className="text-slate-600">Loading appointments...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
@@ -268,7 +401,6 @@ export function Appointments() {
           <h2 className="text-2xl text-slate-800 mb-6">Select Service to View Appointments</h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {services.map((service, index) => {
-              const ServiceIcon = service.icon;
               const gradients = [
                 'from-blue-500 to-blue-600',
                 'from-purple-500 to-purple-600',
@@ -282,22 +414,22 @@ export function Appointments() {
               return (
                 <button
                   key={service.id}
-                  onClick={() => setSelectedServiceForView(service.name)}
+                  onClick={() => setSelectedServiceForView(service.id)}
                   className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all border border-slate-200 text-left"
                 >
                   <div className={`w-full h-48 bg-gradient-to-br ${gradient} flex items-center justify-center`}>
-                    {ServiceIcon && <ServiceIcon className="w-16 h-16 text-white" />}
+                    <Building2 className="w-16 h-16 text-white" />
                   </div>
                   <div className="p-6">
                     <h3 className="text-xl text-slate-800 mb-2">{service.name}</h3>
-                    <p className="text-slate-600 text-sm mb-4">{service.description}</p>
+                    <p className="text-slate-600 text-sm mb-4">{service.description || 'Service available'}</p>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2 text-slate-500 text-sm">
                         <Clock className="w-4 h-4" />
-                        {service.duration}
+                        {service.estimated_time} min
                       </div>
                       <span className="text-blue-600 text-sm font-medium">
-                        {appointments.filter(apt => apt.service === service.name).length} appointments
+                        {appointments.filter(apt => apt.service_id === service.id).length} appointments
                       </span>
                     </div>
                   </div>
@@ -430,7 +562,7 @@ export function Appointments() {
               >
                 <option value="">Select a service</option>
                 {services.map(service => (
-                  <option key={service.id} value={service.name}>{service.name} - {service.duration}</option>
+                  <option key={service.id} value={service.name}>{service.name} - {service.estimated_time} min</option>
                 ))}
               </select>
             </div>
@@ -446,8 +578,8 @@ export function Appointments() {
                     value={formData.customerName}
                     onChange={(e) => setFormData({ ...formData, customerName: e.target.value })}
                     placeholder="Enter your name"
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
+                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-50"
+                    readOnly
                   />
                 </div>
               </div>
@@ -473,18 +605,14 @@ export function Appointments() {
 
               {/* Date */}
               <div>
-                <label className="text-sm text-slate-600 mb-2 block">Appointment Date</label>
-                <div className="relative">
-                  <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    min={new Date().toISOString().split('T')[0]}
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
+                <DatePicker
+                  label="Appointment Date"
+                  value={formData.date}
+                  onChange={(date) => setFormData({ ...formData, date })}
+                  minDate={new Date().toISOString().split('T')[0]}
+                  placeholder="Select appointment date"
+                  icon={<CalendarIcon className="w-5 h-5 text-slate-400" />}
+                />
               </div>
             </div>
 
@@ -492,21 +620,41 @@ export function Appointments() {
             <div>
               <label className="text-sm text-slate-600 mb-2 block">Select Time Slot</label>
               <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
-                {timeSlots.map(slot => (
-                  <button
-                    key={slot}
-                    type="button"
-                    onClick={() => setFormData({ ...formData, time: slot })}
-                    className={`py-2 px-3 rounded-lg border-2 transition-all text-sm ${
-                      formData.time === slot
-                        ? 'border-blue-600 bg-blue-600 text-white'
-                        : 'border-slate-200 hover:border-blue-300'
-                    }`}
-                  >
-                    {slot}
-                  </button>
-                ))}
+                {timeSlots.map(slot => {
+                  // Check if this slot is already booked for the selected date and service
+                  const isBooked = formData.date && formData.service && appointments.some(apt =>
+                    apt.appointment_date === formData.date &&
+                    apt.appointment_time === slot &&
+                    services.find(s => s.id === apt.service_id)?.name === formData.service &&
+                    apt.status !== 'cancelled' &&
+                    apt.status !== 'completed'
+                  );
+
+                  return (
+                    <button
+                      key={slot}
+                      type="button"
+                      onClick={() => !isBooked && setFormData({ ...formData, time: slot })}
+                      disabled={isBooked}
+                      className={`py-2 px-3 rounded-lg border-2 transition-all text-sm ${
+                        isBooked
+                          ? 'border-slate-300 bg-slate-100 text-slate-400 cursor-not-allowed'
+                          : formData.time === slot
+                          ? 'border-blue-600 bg-blue-600 text-white'
+                          : 'border-slate-200 hover:border-blue-300'
+                      }`}
+                    >
+                      {slot}
+                      {isBooked && <span className="block text-xs">Booked</span>}
+                    </button>
+                  );
+                })}
               </div>
+              {formData.date && formData.service && (
+                <p className="text-xs text-slate-500 mt-2">
+                  Grey slots are already booked. Please select an available time.
+                </p>
+              )}
             </div>
 
             {/* Submit */}

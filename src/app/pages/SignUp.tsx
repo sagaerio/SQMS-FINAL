@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { User, Mail, Lock, Calendar, UserPlus, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { DatePicker } from '../components/DatePicker';
 
 export function SignUp() {
   const navigate = useNavigate();
+  const { signUp } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -14,6 +17,7 @@ export function SignUp() {
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -22,27 +26,64 @@ export function SignUp() {
     });
   };
 
-  const handleSignUp = (e: React.FormEvent) => {
+  const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
     // Validation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
+      setLoading(false);
       return;
     }
 
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long');
+      setLoading(false);
       return;
     }
 
-    // Mock successful registration
-    setSuccess(true);
-    setTimeout(() => {
-      alert(`Account created successfully!\n\nName: ${formData.firstName} ${formData.lastName}\nEmail: ${formData.email}\n\nYou can now sign in with your credentials.`);
-      navigate('/login');
-    }, 1500);
+    // Age validation (must be 21+)
+    if (formData.dateOfBirth) {
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      const dayDiff = today.getDate() - birthDate.getDate();
+
+      const actualAge = monthDiff < 0 || (monthDiff === 0 && dayDiff < 0) ? age - 1 : age;
+
+      if (actualAge < 21) {
+        setError('You must be 21 years or older to create an account');
+        setLoading(false);
+        return;
+      }
+    }
+
+    try {
+      const fullName = `${formData.firstName} ${formData.lastName}`;
+      const { error: signUpError } = await signUp(
+        formData.email,
+        formData.password,
+        fullName,
+        'customer'
+      );
+
+      if (signUpError) {
+        setError(signUpError.message || 'Failed to create account');
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(true);
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1500);
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
+    }
   };
 
   return (
@@ -113,18 +154,15 @@ export function SignUp() {
 
               {/* Date of Birth */}
               <div>
-                <label className="text-sm text-slate-600 mb-2 block">Date of Birth</label>
-                <div className="relative">
-                  <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="date"
-                    name="dateOfBirth"
-                    value={formData.dateOfBirth}
-                    onChange={handleChange}
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
+                <DatePicker
+                  label="Date of Birth"
+                  value={formData.dateOfBirth}
+                  onChange={(date) => setFormData({ ...formData, dateOfBirth: date })}
+                  maxDate={new Date().toISOString().split('T')[0]}
+                  placeholder="Select your date of birth"
+                  icon={<Calendar className="w-5 h-5 text-slate-400" />}
+                />
+                <p className="text-xs text-slate-500 mt-1">You must be 21 years or older to create an account</p>
               </div>
 
               {/* Email */}
@@ -181,10 +219,11 @@ export function SignUp() {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <UserPlus className="w-5 h-5" />
-                Create Account
+                {loading ? 'Creating Account...' : 'Create Account'}
               </button>
             </form>
           )}

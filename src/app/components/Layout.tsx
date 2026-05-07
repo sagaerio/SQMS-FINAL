@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { IndustrySelector } from './IndustrySelector';
 import type { Industry } from './IndustrySelector';
 
@@ -63,12 +64,13 @@ export function Layout() {
   const [userRole, setUserRole] = useState('customer');
   const [navItems, setNavItems] = useState<any[]>([]);
   const { industry, setIndustry } = useIndustry();
+  const { user, signOut } = useAuth();
   const [showIndustrySelector, setShowIndustrySelector] = useState(false);
 
   useEffect(() => {
-    const email = localStorage.getItem('sqms_user_email') || 'demo@sqms.com';
-    const role = localStorage.getItem('sqms_user_role') || 'customer';
-    const name = localStorage.getItem('sqms_user_name') || 'Demo User';
+    const email = user?.email || localStorage.getItem('sqms_user_email') || 'demo@sqms.com';
+    const role = user?.role || localStorage.getItem('sqms_user_role') || 'customer';
+    const name = user?.full_name || localStorage.getItem('sqms_user_name') || 'Demo User';
 
     setUserEmail(email);
     setUserRole(role);
@@ -79,9 +81,10 @@ export function Layout() {
     if (!industry) {
       setShowIndustrySelector(true);
     }
-  }, [industry]);
+  }, [industry, user]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     localStorage.removeItem('sqms_logged_in');
     localStorage.removeItem('sqms_user_email');
     localStorage.removeItem('sqms_user_role');
@@ -170,7 +173,7 @@ export function Layout() {
                         className="w-full flex items-center gap-3 px-4 py-2 text-slate-700 hover:bg-slate-100 transition-all"
                       >
                         <Briefcase className="w-4 h-4" />
-                        <span className="text-sm">Change Business</span>
+                        <span className="text-sm">Change Service</span>
                       </button>
                     )}
                     <button

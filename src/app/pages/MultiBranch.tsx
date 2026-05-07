@@ -95,6 +95,9 @@ export function MultiBranch() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'busy' | 'closed'>('all');
   const [businessType, setBusinessType] = useState<string>('');
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [locationEnabled, setLocationEnabled] = useState(false);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string>('');
 
   useEffect(() => {
     const selectedBusinessType = localStorage.getItem('sqms_business_type') || 'bank';
@@ -147,6 +150,89 @@ export function MultiBranch() {
     }
   };
 
+  const requestLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser');
+      return;
+    }
+
+    setLocationError('');
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setUserLocation({ lat: latitude, lng: longitude });
+        setLocationEnabled(true);
+
+        // Demo: Recalculate distances based on user location
+        // Using simple distance approximation for demo purposes
+        const updatedBranches = branches.map(branch => {
+          // Demo coordinates for branches (using approximate NYC, LA, Chicago, etc.)
+          const branchCoords: { [key: string]: { lat: number; lng: number } } = {
+            'New York - Manhattan': { lat: 40.7484, lng: -73.9857 },
+            'Los Angeles - Downtown': { lat: 34.0522, lng: -118.2437 },
+            'Chicago - Loop': { lat: 41.8781, lng: -87.6298 },
+            'San Francisco - Financial District': { lat: 37.7749, lng: -122.4194 },
+            'Miami - Brickell': { lat: 25.7617, lng: -80.1918 },
+            'Boston - Back Bay': { lat: 42.3501, lng: -71.0820 }
+          };
+
+          const branchLoc = branchCoords[branch.name] || { lat: 40.7484, lng: -73.9857 };
+          const distance = calculateDistance(latitude, longitude, branchLoc.lat, branchLoc.lng);
+
+          return { ...branch, distance: `${distance.toFixed(1)} km` };
+        });
+
+        // Sort by distance
+        updatedBranches.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+        setBranches(updatedBranches);
+      },
+      (error) => {
+        setLocationError('Unable to retrieve your location. Using default locations.');
+        // Demo: Use a default location (e.g., Times Square, NYC)
+        const defaultLat = 40.7580;
+        const defaultLng = -73.9855;
+        setUserLocation({ lat: defaultLat, lng: defaultLng });
+        setLocationEnabled(true);
+
+        // Still recalculate with default location for demo
+        const updatedBranches = branches.map(branch => {
+          const branchCoords: { [key: string]: { lat: number; lng: number } } = {
+            'New York - Manhattan': { lat: 40.7484, lng: -73.9857 },
+            'Los Angeles - Downtown': { lat: 34.0522, lng: -118.2437 },
+            'Chicago - Loop': { lat: 41.8781, lng: -87.6298 },
+            'San Francisco - Financial District': { lat: 37.7749, lng: -122.4194 },
+            'Miami - Brickell': { lat: 25.7617, lng: -80.1918 },
+            'Boston - Back Bay': { lat: 42.3501, lng: -71.0820 }
+          };
+
+          const branchLoc = branchCoords[branch.name] || { lat: 40.7484, lng: -73.9857 };
+          const distance = calculateDistance(defaultLat, defaultLng, branchLoc.lat, branchLoc.lng);
+
+          return { ...branch, distance: `${distance.toFixed(1)} km` };
+        });
+
+        updatedBranches.sort((a, b) => parseFloat(a.distance) - parseFloat(b.distance));
+        setBranches(updatedBranches);
+      }
+    );
+  };
+
+  // Haversine formula to calculate distance between two coordinates
+  const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+    const R = 6371; // Earth's radius in km
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const toRad = (value: number): number => {
+    return (value * Math.PI) / 180;
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Business Type Header */}
@@ -157,6 +243,51 @@ export function MultiBranch() {
             <div>
               <h1 className="text-3xl mb-1">{currentBusinessType.name} Locations</h1>
               <p className="text-white/90">Select your nearest branch and view real-time queue status</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Permission Banner */}
+      {!locationEnabled && (
+        <div className="bg-gradient-to-r from-teal-600 to-teal-700 rounded-2xl shadow-lg p-6 mb-6 text-white">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 backdrop-blur-sm rounded-full p-3">
+                <Navigation className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl mb-1">Find Your Nearest Branch</h3>
+                <p className="text-white/90 text-sm">Enable location to see branches sorted by distance from you</p>
+              </div>
+            </div>
+            <button
+              onClick={requestLocation}
+              className="px-6 py-3 bg-white text-teal-600 rounded-xl hover:bg-teal-50 transition-all font-medium"
+            >
+              Enable Location
+            </button>
+          </div>
+          {locationError && (
+            <div className="mt-3 p-3 bg-white/10 backdrop-blur-sm rounded-lg text-sm">
+              {locationError}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Location Enabled Status */}
+      {locationEnabled && userLocation && (
+        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="bg-green-600 rounded-full p-2">
+              <Navigation className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="text-green-800 font-medium">Location Enabled</p>
+              <p className="text-sm text-green-600">
+                Showing branches sorted by distance from your location ({userLocation.lat.toFixed(4)}, {userLocation.lng.toFixed(4)})
+              </p>
             </div>
           </div>
         </div>

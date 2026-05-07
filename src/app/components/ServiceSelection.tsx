@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Briefcase, Heart, ShoppingBag, Landmark, GraduationCap, Building2 } from 'lucide-react';
+import { getServicesByIndustry } from '../../services/queueService';
 
 interface Service {
   id: string;
   name: string;
   description: string;
+  estimated_time?: number;
 }
 
+// Keep as fallback for industries without services in DB
 const servicesByIndustry: Record<string, Service[]> = {
   banking: [
     { id: 'account-opening', name: 'Account Opening', description: 'Open a new bank account' },
@@ -79,9 +82,35 @@ interface ServiceSelectionProps {
 
 export function ServiceSelection({ industryId, onSelect, onClose, showClose = false }: ServiceSelectionProps) {
   const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const services = servicesByIndustry[industryId] || [];
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
   const Icon = industryIcons[industryId];
   const color = industryColors[industryId];
+
+  useEffect(() => {
+    const loadServices = async () => {
+      setLoading(true);
+      const { data, error } = await getServicesByIndustry(industryId);
+
+      if (data && data.length > 0) {
+        // Map Supabase services to component format
+        const mappedServices: Service[] = data.map(service => ({
+          id: service.id,
+          name: service.name,
+          description: service.description || '',
+          estimated_time: service.estimated_time
+        }));
+        setServices(mappedServices);
+      } else {
+        // Use fallback mock data
+        setServices(servicesByIndustry[industryId] || []);
+      }
+
+      setLoading(false);
+    };
+
+    loadServices();
+  }, [industryId]);
 
   const handleSelect = (service: Service) => {
     setSelectedService(service);
@@ -120,38 +149,52 @@ export function ServiceSelection({ industryId, onSelect, onClose, showClose = fa
           </div>
 
           <div className="grid grid-cols-1 gap-3 mb-6">
-            {services.map((service) => {
-              const isSelected = selectedService?.id === service.id;
+            {loading ? (
+              <div className="text-center py-12">
+                <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-slate-600">Loading services...</p>
+              </div>
+            ) : services.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-slate-600">No services available for this industry.</p>
+              </div>
+            ) : (
+              services.map((service) => {
+                const isSelected = selectedService?.id === service.id;
 
-              return (
-                <button
-                  key={service.id}
-                  onClick={() => handleSelect(service)}
-                  className={`p-5 rounded-xl border-2 transition-all text-left ${
-                    isSelected
-                      ? 'border-blue-600 bg-blue-50 shadow-lg'
-                      : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg text-slate-800 mb-1">{service.name}</h3>
-                      <p className="text-sm text-slate-600">{service.description}</p>
-                    </div>
-
-                    {isSelected && (
-                      <div className="flex items-center gap-2 text-blue-600 text-sm ml-4">
-                        <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-                          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                          </svg>
-                        </div>
+                return (
+                  <button
+                    key={service.id}
+                    onClick={() => handleSelect(service)}
+                    className={`p-5 rounded-xl border-2 transition-all text-left ${
+                      isSelected
+                        ? 'border-blue-600 bg-blue-50 shadow-lg'
+                        : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <h3 className="text-lg text-slate-800 mb-1">{service.name}</h3>
+                        <p className="text-sm text-slate-600">{service.description}</p>
+                        {service.estimated_time && (
+                          <p className="text-xs text-blue-600 mt-2">Est. time: {service.estimated_time} min</p>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
+
+                      {isSelected && (
+                        <div className="flex items-center gap-2 text-blue-600 text-sm ml-4">
+                          <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </button>
+                );
+              })
+            )}
           </div>
 
           <button

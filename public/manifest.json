@@ -1,0 +1,23 @@
+{
+  "name": "Smart Queue Management System",
+  "short_name": "SQMS",
+  "description": "Desktop-focused Smart Queue Management System with Virtual Queues and Appointments",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "type": "image/svg+xml",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ import { SignUp } from "./pages/SignUp";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Dashboard } from "./pages/Dashboard";
 import { Profile } from "./pages/Profile";
-import { QueueStatus } from "./pages/QueueStatus";
+import { QueueStatus } from "./pages/QueueStatusNew";
 import { Services } from "./pages/Services";
 import { Appointments } from "./pages/Appointments";
 import { Analytics } from "./pages/Analytics";

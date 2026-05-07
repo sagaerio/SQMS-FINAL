@@ -1,58 +1,66 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Mail, Lock, LogIn, Info, ArrowLeft } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export function Login() {
   const navigate = useNavigate();
+  const { signIn, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      navigate('/dashboard');
+    }
+  }, [user, navigate]);
 
   // Load saved credentials on mount
   useEffect(() => {
     const savedEmail = localStorage.getItem('sqms_remembered_email');
-    const savedPassword = localStorage.getItem('sqms_remembered_password');
-    if (savedEmail && savedPassword) {
+    if (savedEmail) {
       setEmail(savedEmail);
-      setPassword(savedPassword);
       setRememberMe(true);
     }
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    // Validate password length
-    if (password.length > 20) {
-      setError('Password must be 20 characters or less');
-      return;
-    }
+    setLoading(true);
 
     if (password.trim() === '') {
       setError('Please enter a password');
+      setLoading(false);
       return;
     }
 
-    // Save credentials if remember me is checked
-    if (rememberMe) {
-      localStorage.setItem('sqms_remembered_email', email);
-      localStorage.setItem('sqms_remembered_password', password);
-    } else {
-      localStorage.removeItem('sqms_remembered_email');
-      localStorage.removeItem('sqms_remembered_password');
+    try {
+      const { error: signInError } = await signIn(email, password);
+
+      if (signInError) {
+        setError(signInError.message || 'Invalid email or password');
+        setLoading(false);
+        return;
+      }
+
+      // Save email if remember me is checked
+      if (rememberMe) {
+        localStorage.setItem('sqms_remembered_email', email);
+      } else {
+        localStorage.removeItem('sqms_remembered_email');
+      }
+
+      // Success - redirect to dashboard
+      navigate('/dashboard');
+    } catch (err) {
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
     }
-
-    // Save login session as customer
-    localStorage.setItem('sqms_logged_in', 'true');
-    localStorage.setItem('sqms_user_email', email);
-    localStorage.setItem('sqms_user_role', 'customer');
-    localStorage.setItem('sqms_user_name', email.split('@')[0]);
-    localStorage.setItem(`sqms_password_${email}`, password);
-
-    // Success - redirect to dashboard (will show service selection)
-    navigate('/dashboard');
   };
 
   const handleForgotPassword = () => {
@@ -93,8 +101,10 @@ export function Login() {
               <div className="flex items-start gap-2">
                 <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p>Customer portal - Enter any email and password to sign in</p>
-                  <p className="mt-1 text-blue-600">Staff? Visit <span className="font-semibold">Staff Portal</span> from the home page</p>
+                  <p>Customer portal demo account:</p>
+                  <p className="mt-1 font-mono bg-blue-100 px-2 py-1 rounded inline-block text-xs">Email: demo@customer.com</p>
+                  <p className="mt-1 font-mono bg-blue-100 px-2 py-1 rounded inline-block text-xs ml-2">Password: demo123</p>
+                  <p className="mt-2 text-blue-600">Staff? Visit <span className="font-semibold">Staff Portal</span> from the home page</p>
                 </div>
               </div>
             </div>
@@ -155,10 +165,11 @@ export function Login() {
             {/* Submit Button */}
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+              disabled={loading}
+              className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <LogIn className="w-5 h-5" />
-              Sign In
+              {loading ? 'Signing In...' : 'Sign In'}
             </button>
           </form>
 

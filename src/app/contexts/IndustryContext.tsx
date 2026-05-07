@@ -1,31 +1,63 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import type { Industry } from '../components/IndustrySelector';
-import { industries } from '../components/IndustrySelector';
+import { industries as fallbackIndustries } from '../components/IndustrySelector';
+import { getAllIndustries } from '../../services/queueService';
 
 interface IndustryContextType {
   industry: Industry | null;
   setIndustry: (industry: Industry) => void;
   clearIndustry: () => void;
+  industries: Industry[];
+  loading: boolean;
 }
 
 const IndustryContext = createContext<IndustryContextType | undefined>(undefined);
 
 export function IndustryProvider({ children }: { children: ReactNode }) {
   const [industry, setIndustryState] = useState<Industry | null>(null);
+  const [industries, setIndustries] = useState<Industry[]>(fallbackIndustries);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Load industries from Supabase
+    const loadIndustries = async () => {
+      const { data, error } = await getAllIndustries();
+
+      if (data && data.length > 0) {
+        // Map Supabase industries to component format
+        const mappedIndustries: Industry[] = data.map(ind => ({
+          id: ind.id,
+          name: ind.name,
+          icon: ind.icon as any,
+          color: ind.color,
+          description: ind.description
+        }));
+        setIndustries(mappedIndustries);
+      } else {
+        // Use fallback if no industries in database
+        setIndustries(fallbackIndustries);
+      }
+
+      setLoading(false);
+    };
+
+    loadIndustries();
+
     // Clean up old corrupted industry data
     localStorage.removeItem('sqms_industry');
     localStorage.removeItem('sqms_selected_industry');
 
     const savedIndustryId = localStorage.getItem('sqms_industry_id');
     if (savedIndustryId) {
-      const foundIndustry = industries.find(ind => ind.id === savedIndustryId);
-      if (foundIndustry) {
-        setIndustryState(foundIndustry);
-      } else {
-        localStorage.removeItem('sqms_industry_id');
-      }
+      // Wait for industries to load before setting
+      setTimeout(() => {
+        const foundIndustry = industries.find(ind => ind.id === savedIndustryId);
+        if (foundIndustry) {
+          setIndustryState(foundIndustry);
+        } else {
+          localStorage.removeItem('sqms_industry_id');
+        }
+      }, 100);
     }
   }, []);
 
@@ -40,7 +72,7 @@ export function IndustryProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <IndustryContext.Provider value={{ industry, setIndustry, clearIndustry }}>
+    <IndustryContext.Provider value={{ industry, setIndustry, clearIndustry, industries, loading }}>
       {children}
     </IndustryContext.Provider>
   );

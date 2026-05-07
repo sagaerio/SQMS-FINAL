@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
+import { useAuth } from '../contexts/AuthContext';
 import {
   Settings,
   Plus,
@@ -63,6 +64,7 @@ const getAvgWaitTime = (estimatedTime: string): number => {
 
 export function AdminDashboard() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [userRole, setUserRole] = useState('admin');
   const [activeSection, setActiveSection] = useState<'main' | 'admin-panel' | 'queue-status' | 'appointments' | 'analytics' | 'support'>('main');
   const [activeTab, setActiveTab] = useState<'services' | 'branches' | 'rules' | 'industry'>('services');
@@ -87,12 +89,12 @@ export function AdminDashboard() {
   const [showAddBranch, setShowAddBranch] = useState(false);
 
   useEffect(() => {
-    const role = localStorage.getItem('sqms_user_role') || 'admin';
+    const role = user?.role || localStorage.getItem('sqms_user_role') || 'admin';
     setUserRole(role);
     const selectedBusinessType = localStorage.getItem('sqms_business_type') || 'bank';
     setBusinessType(selectedBusinessType);
     loadServicesAndBranches(selectedBusinessType);
-  }, []);
+  }, [user]);
 
   const loadServicesAndBranches = (type: string) => {
     // Load services for the selected business type
@@ -393,8 +395,8 @@ export function AdminDashboard() {
                       : 'bg-white text-slate-800 shadow-lg hover:shadow-xl border-2 border-transparent hover:border-purple-400'
                   }`}
                 >
-                  <div className={`text-4xl mb-3 ${businessType === type.id ? '' : 'group-hover:scale-110 transition-transform'}`}>
-                    {type.icon}
+                  <div className={`text-4xl mb-3 ${businessType === type.id ? '' : 'group-hover:scale-110 transition-transform'} flex justify-center`}>
+                    {(() => { const Icon = type.icon; return <Icon className="w-[1em] h-[1em] mx-auto" /> })()}
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${businessType === type.id ? 'text-white' : 'text-slate-800 group-hover:text-purple-600'}`}>
                     {type.name}
@@ -413,7 +415,9 @@ export function AdminDashboard() {
               {/* Current Business Type Display */}
               <div className="mb-8 bg-gradient-to-r from-purple-50 to-blue-50 rounded-2xl p-6 border border-purple-200">
                 <div className="flex items-center gap-4">
-                  <div className="text-5xl">{currentBusinessType.icon}</div>
+                  <div className="text-5xl">
+                    {(() => { const Icon = currentBusinessType.icon; return <Icon className="w-[1em] h-[1em]" /> })()}
+                  </div>
                   <div>
                     <h3 className="text-xl font-bold text-slate-800 mb-1">
                       Current Industry: {currentBusinessType.name}
@@ -901,8 +905,8 @@ export function AdminDashboard() {
                       : 'bg-white text-slate-800 shadow-lg hover:shadow-xl border-2 border-transparent hover:border-green-400'
                   }`}
                 >
-                  <div className={`text-4xl mb-3 ${queueStatusBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'}`}>
-                    {type.icon}
+                  <div className={`text-4xl mb-3 ${queueStatusBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'} flex justify-center`}>
+                    {(() => { const Icon = type.icon; return <Icon className="w-[1em] h-[1em] mx-auto" /> })()}
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${queueStatusBusinessType === type.id ? 'text-white' : 'text-slate-800 group-hover:text-green-600'}`}>
                     {type.name}
@@ -1059,8 +1063,8 @@ export function AdminDashboard() {
                       : 'bg-white text-slate-800 shadow-lg hover:shadow-xl border-2 border-transparent hover:border-teal-400'
                   }`}
                 >
-                  <div className={`text-4xl mb-3 ${appointmentsBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'}`}>
-                    {type.icon}
+                  <div className={`text-4xl mb-3 ${appointmentsBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'} flex justify-center`}>
+                    {(() => { const Icon = type.icon; return <Icon className="w-[1em] h-[1em] mx-auto" /> })()}
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${appointmentsBusinessType === type.id ? 'text-white' : 'text-slate-800 group-hover:text-teal-600'}`}>
                     {type.name}
@@ -1213,8 +1217,8 @@ export function AdminDashboard() {
                       : 'bg-white text-slate-800 shadow-lg hover:shadow-xl border-2 border-transparent hover:border-blue-400'
                   }`}
                 >
-                  <div className={`text-4xl mb-3 ${analyticsBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'}`}>
-                    {type.icon}
+                  <div className={`text-4xl mb-3 ${analyticsBusinessType === type.id ? '' : 'group-hover:scale-110 transition-transform'} flex justify-center`}>
+                    {(() => { const Icon = type.icon; return <Icon className="w-[1em] h-[1em] mx-auto" /> })()}
                   </div>
                   <h3 className={`text-lg font-semibold mb-1 ${analyticsBusinessType === type.id ? 'text-white' : 'text-slate-800 group-hover:text-blue-600'}`}>
                     {type.name}
@@ -1383,7 +1387,9 @@ export function AdminDashboard() {
                     onClick={() => setSupportBusinessType(type.id)}
                     className="bg-white rounded-3xl shadow-xl p-8 border-2 border-slate-200 hover:border-orange-500 hover:shadow-2xl transition-all duration-300 text-left group"
                   >
-                    <div className="text-5xl mb-4">{type.icon}</div>
+                    <div className="text-5xl mb-4 flex justify-center">
+                      {(() => { const Icon = type.icon; return <Icon className="w-[1em] h-[1em]" /> })()}
+                    </div>
                     <h3 className="text-2xl text-slate-800 mb-2 group-hover:text-orange-600 transition-colors">
                       {type.name}
                     </h3>

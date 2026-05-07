@@ -15,37 +15,51 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ServiceSelection, servicesByIndustry } from '../components/ServiceSelection';
 import type { Service } from '../components/ServiceSelection';
 import { branches as allBranches } from '../data/businessTypes';
 import { QRCodeSVG } from 'qrcode.react';
+import { createQueueTicket, getActiveTicket } from '../../services/queueService';
+import type { QueueTicket } from '../../lib/supabase';
 
 export function Services() {
   const [showServiceSelection, setShowServiceSelection] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBranch, setSelectedBranch] = useState('');
   const [showQueueConfirmation, setShowQueueConfirmation] = useState(false);
-  const [queueNumber, setQueueNumber] = useState(0);
-  const [counterNumber, setCounterNumber] = useState(0);
+  const [queueTicket, setQueueTicket] = useState<QueueTicket | null>(null);
   const [hasActiveTicket, setHasActiveTicket] = useState(false);
+  const [loading, setLoading] = useState(false);
   const { industry } = useIndustry();
+  const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user already has an active ticket
-    const queue = JSON.parse(localStorage.getItem('sqms_queue') || '[]');
-    const activeTicket = queue.find((t: any) =>
-      t.status === 'waiting' || t.status === 'serving'
-    );
-    setHasActiveTicket(!!activeTicket);
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    // Check if user already has an active ticket from Supabase
+    const checkActiveTicket = async () => {
+      const { data } = await getActiveTicket(user.id);
+      setHasActiveTicket(!!data);
+      if (data) {
+        setQueueTicket(data);
+      }
+    };
+    checkActiveTicket();
 
     // Check if user already has a selected service from dashboard
     const savedService = localStorage.getItem('sqms_selected_service');
     if (savedService) {
       setSelectedService(JSON.parse(savedService));
     }
-    // Don't show service selection here - user must select from dashboard first
-  }, []);
+  }, [user, authLoading, navigate]);
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
@@ -77,37 +91,61 @@ export function Services() {
     img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
   };
 
-  const handleJoinQueue = () => {
-    if (!selectedService || !selectedBranch || hasActiveTicket) return;
+  const handleJoinQueue = async () => {
+    if (!selectedService || !selectedBranch || hasActiveTicket || !user || !industry) return;
 
-    // Generate a random queue number and counter/room
-    const ticketNumber = Math.floor(Math.random() * 900) + 100;
-    const counter = Math.floor(Math.random() * 10) + 1;
-    const position = Math.floor(Math.random() * 10) + 1;
-    const estimatedWait = `${Math.floor(Math.random() * 30) + 10} min`;
+    setLoading(true);
+    try {
+      // Get the real service ID from Supabase if using mock data
+      let serviceId = selectedService.id;
 
-    setQueueNumber(ticketNumber);
-    setCounterNumber(counter);
+      // Check if the service ID is a UUID (real Supabase ID)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
 
-    // Save to queue
-    const queueEntry = {
-      id: Date.now().toString(),
-      ticketNumber,
-      counter,
-      service: selectedService,
-      branch: allBranches.find(b => b.id === selectedBranch),
-      timestamp: new Date().toISOString(),
-      status: 'waiting',
-      position,
-      estimatedWait
-    };
+      if (!isUUID) {
+        // This is a mock ID, try to find the real service in Supabase
+        const { getServicesByIndustry } = await import('../../services/queueService');
+        const { data: services } = await getServicesByIndustry(industry.id);
 
-    const existingQueue = JSON.parse(localStorage.getItem('sqms_queue') || '[]');
-    existingQueue.push(queueEntry);
-    localStorage.setItem('sqms_queue', JSON.stringify(existingQueue));
+        if (services && services.length > 0) {
+          // Find service by name
+          const realService = services.find(s => s.name === selectedService.name);
+          if (realService) {
+            serviceId = realService.id;
+          } else {
+            // Use first service as fallback
+            serviceId = services[0].id;
+          }
+        } else {
+          alert('No services available. Please contact support.');
+          setLoading(false);
+          return;
+        }
+      }
 
-    setHasActiveTicket(true);
-    setShowQueueConfirmation(true);
+      // Create queue ticket in Supabase
+      const { data, error } = await createQueueTicket(
+        user.id,
+        industry.id,
+        serviceId
+      );
+
+      if (error || !data) {
+        console.error('Queue creation error:', error);
+        alert(`Failed to join queue: ${error?.message || 'Unknown error'}. Please try again.`);
+        setLoading(false);
+        return;
+      }
+
+      setQueueTicket(data);
+      setHasActiveTicket(true);
+      setShowQueueConfirmation(true);
+    } catch (err: any) {
+      console.error('Queue joining error:', err);
+      alert(`An error occurred: ${err?.message || 'Unknown error'}. Please try again.`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const branches = allBranches.filter(b => b.businessType === industry?.id);
@@ -148,13 +186,13 @@ export function Services() {
               <div className="bg-white p-6 rounded-xl mb-4 inline-block">
                 <QRCodeSVG
                   id="qr-code-svg"
-                  value={`TICKET-${queueNumber}-${Date.now()}`}
+                  value={`TICKET-${queueTicket?.ticket_number || ''}`}
                   size={160}
                   level="H"
                   includeMargin={true}
                 />
               </div>
-              <p className="text-6xl mb-2">{queueNumber}</p>
+              <p className="text-6xl mb-2">{queueTicket?.ticket_number}</p>
               <p className="text-lg opacity-90 mb-4">Please wait for your turn</p>
               <button
                 onClick={downloadQRCode}
@@ -169,8 +207,9 @@ export function Services() {
               <div className="space-y-2 text-sm text-slate-600">
                 <p><strong>Service:</strong> {selectedService?.name}</p>
                 <p><strong>Branch:</strong> {allBranches.find(b => b.id === selectedBranch)?.name}</p>
-                <p><strong>Counter/Room:</strong> <span className="text-blue-600 font-semibold">#{counterNumber}</span></p>
-                <p><strong>Status:</strong> <span className="text-green-600">Waiting</span></p>
+                <p><strong>Position:</strong> <span className="text-blue-600 font-semibold">#{queueTicket?.position}</span></p>
+                <p><strong>Estimated Wait:</strong> <span className="text-orange-600">{queueTicket?.estimated_wait_time} min</span></p>
+                <p><strong>Status:</strong> <span className="text-green-600 capitalize">{queueTicket?.status}</span></p>
               </div>
             </div>
             <div className="flex gap-4">
@@ -349,10 +388,11 @@ export function Services() {
                 </div>
                 <button
                   onClick={handleJoinQueue}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-xl hover:shadow-2xl transition-all flex items-center gap-3"
+                  disabled={loading || hasActiveTicket}
+                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-xl hover:shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Ticket className="w-6 h-6" />
-                  <span className="text-lg">Join Virtual Queue</span>
+                  <span className="text-lg">{loading ? 'Joining Queue...' : 'Join Virtual Queue'}</span>
                 </button>
               </div>
             </div>

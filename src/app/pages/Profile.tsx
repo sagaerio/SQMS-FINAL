@@ -1,11 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { User, Mail, Calendar, Shield, Edit2, Save, X, LogOut, Lock, Eye, EyeOff } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { User, Mail, Calendar, Shield, Edit2, Save, X, LogOut, Lock, Eye, EyeOff, Briefcase } from 'lucide-react';
+import { useIndustry } from '../contexts/IndustryContext';
+import { ServiceSelection } from '../components/ServiceSelection';
+import { DatePicker } from '../components/DatePicker';
+import type { Service } from '../components/ServiceSelection';
 
 export function Profile() {
   const navigate = useNavigate();
+  const { user, signOut, loading: authLoading } = useAuth();
+  const { industry } = useIndustry();
   const [isEditing, setIsEditing] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [showServiceSelection, setShowServiceSelection] = useState(false);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [userEmail, setUserEmail] = useState('demo@sqms.com');
   const [userRole, setUserRole] = useState('customer');
   const [formData, setFormData] = useState({
@@ -34,10 +43,16 @@ export function Profile() {
   });
 
   useEffect(() => {
-    const email = localStorage.getItem('sqms_user_email') || 'demo@sqms.com';
-    const role = localStorage.getItem('sqms_user_role') || 'customer';
-    const name = localStorage.getItem('sqms_user_name') || 'Demo User';
+    const email = user?.email || localStorage.getItem('sqms_user_email') || 'demo@sqms.com';
+    const role = user?.role || localStorage.getItem('sqms_user_role') || 'customer';
+    const name = user?.full_name || localStorage.getItem('sqms_user_name') || 'Demo User';
     const staffIndustry = localStorage.getItem('sqms_staff_industry') || '';
+
+    // Load selected service for customers
+    const savedService = localStorage.getItem('sqms_selected_service');
+    if (savedService && role === 'customer') {
+      setSelectedService(JSON.parse(savedService));
+    }
 
     setUserEmail(email);
     setUserRole(role);
@@ -106,7 +121,7 @@ export function Profile() {
       role: roleDisplay,
       ...staffDetails
     }));
-  }, []);
+  }, [user]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({
@@ -165,12 +180,19 @@ export function Profile() {
     setIsChangingPassword(false);
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut();
     localStorage.removeItem('sqms_logged_in');
     localStorage.removeItem('sqms_user_email');
     localStorage.removeItem('sqms_user_role');
     localStorage.removeItem('sqms_user_name');
     navigate('/login');
+  };
+
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    localStorage.setItem('sqms_selected_service', JSON.stringify(service));
+    setShowServiceSelection(false);
   };
 
   return (
@@ -301,20 +323,16 @@ export function Profile() {
 
                 {/* Date of Birth */}
                 <div>
-                  <label className="text-sm text-slate-600 mb-2 block">Date of Birth</label>
-                  <div className="relative">
-                    <Calendar className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input
-                      type="date"
-                      name="dateOfBirth"
-                      value={formData.dateOfBirth}
-                      onChange={handleChange}
-                      disabled={!isEditing}
-                      className={`w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent ${
-                        !isEditing ? 'bg-slate-50 text-slate-600' : ''
-                      }`}
-                    />
-                  </div>
+                  <DatePicker
+                    label="Date of Birth"
+                    value={formData.dateOfBirth}
+                    onChange={(date) => setFormData({ ...formData, dateOfBirth: date })}
+                    maxDate={new Date().toISOString().split('T')[0]}
+                    disabled={!isEditing}
+                    placeholder="Select your date of birth"
+                    icon={<Calendar className="w-5 h-5 text-slate-400" />}
+                    className={!isEditing ? 'bg-slate-50 text-slate-600' : ''}
+                  />
                 </div>
 
                 {/* Phone */}
@@ -522,9 +540,60 @@ export function Profile() {
                 )}
               </div>
             </div>
+
+            {/* Service Selection for Customers */}
+            {userRole === 'customer' && (
+              <div className="mt-6">
+                <div className="bg-white rounded-xl shadow p-6 border border-slate-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h4 className="text-lg text-slate-800 mb-1">Preferred Service</h4>
+                      <p className="text-sm text-slate-600">Select your preferred service</p>
+                    </div>
+                  </div>
+
+                  {selectedService ? (
+                    <div className="flex items-center justify-between p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-blue-600 rounded-lg p-2">
+                          <Briefcase className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-slate-800">{selectedService.name}</p>
+                          <p className="text-sm text-slate-600">{selectedService.estimatedTime} min wait</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowServiceSelection(true)}
+                        className="px-4 py-2 text-sm text-blue-600 hover:bg-blue-100 rounded-lg transition-all"
+                      >
+                        Change Service
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowServiceSelection(true)}
+                      className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
+                    >
+                      Select Service
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Service Selection Modal */}
+      {showServiceSelection && industry && (
+        <ServiceSelection
+          industryId={industry.id}
+          onSelect={handleServiceSelect}
+          onClose={() => setShowServiceSelection(false)}
+          showClose={true}
+        />
+      )}
     </div>
   );
 }
