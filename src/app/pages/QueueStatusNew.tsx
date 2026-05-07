@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download } from 'lucide-react';
+import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download, User, Mail, Briefcase, Users } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { useIndustry } from '../contexts/IndustryContext';
@@ -60,6 +60,31 @@ export function QueueStatus() {
 
     setLoading(true);
     try {
+      // Check if demo user - load or create demo ticket
+      if (user.id === 'demo-user-id') {
+        const demoTicket = localStorage.getItem('sqms_demo_active_ticket');
+        if (demoTicket) {
+          const ticket = JSON.parse(demoTicket);
+          setActiveTicket(ticket);
+          setAllTickets([ticket]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Check for any demo ticket (for non-demo users using demo mode)
+      const anyDemoTicket = localStorage.getItem('sqms_demo_active_ticket');
+      if (anyDemoTicket) {
+        const ticket = JSON.parse(anyDemoTicket);
+        if (ticket.customer_id === user.id) {
+          setActiveTicket(ticket);
+          setAllTickets([ticket]);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // For real Supabase users
       const [activeResult, allResult] = await Promise.all([
         getActiveTicket(user.id),
         getCustomerTickets(user.id)
@@ -84,6 +109,16 @@ export function QueueStatus() {
 
     setCancelling(true);
     try {
+      // Handle demo user
+      if (user?.id === 'demo-user-id') {
+        localStorage.removeItem('sqms_demo_active_ticket');
+        setActiveTicket(null);
+        setAllTickets([]);
+        setCancelling(false);
+        return;
+      }
+
+      // Handle real Supabase user
       const { error } = await cancelTicket(activeTicket.id);
       if (error) {
         alert('Failed to cancel ticket. Please try again.');
@@ -157,97 +192,189 @@ export function QueueStatus() {
     );
   }
 
+  // Get selected service name
+  const getServiceName = () => {
+    const savedService = localStorage.getItem('sqms_selected_service');
+    if (savedService) {
+      const service = JSON.parse(savedService);
+      return service.name;
+    }
+    return 'General Service';
+  };
+
+  // Generate tickets behind the current user
+  const getTicketsBehind = () => {
+    if (!activeTicket) return [];
+
+    const numTicketsBehind = Math.floor(Math.random() * 8) + 5;
+    const tickets = [];
+
+    // Get the letter prefix from current ticket (e.g., "A" from "A042")
+    const currentPrefix = activeTicket.ticket_number.charAt(0);
+    // Get the number part
+    const currentNumber = parseInt(activeTicket.ticket_number.substring(1));
+
+    for (let i = 1; i <= numTicketsBehind; i++) {
+      const ticketNum = currentNumber + i;
+      tickets.push({
+        number: `${currentPrefix}${String(ticketNum).padStart(3, '0')}`,
+        position: activeTicket.position + i
+      });
+    }
+
+    return tickets;
+  };
+
+  const ticketsBehind = getTicketsBehind();
+  const peopleBehind = ticketsBehind.length;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-4xl text-slate-800 mb-3">Queue Status</h1>
         <p className="text-xl text-slate-600 mb-8">Monitor your position in real-time</p>
 
-        {/* Active Ticket */}
-        {activeTicket ? (
-          <div className="bg-white rounded-3xl shadow-2xl p-8 mb-8 border border-blue-200">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl text-slate-800">Active Ticket</h2>
-              <span className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize ${getStatusColor(activeTicket.status)}`}>
-                {activeTicket.status}
-              </span>
+        {/* Ticket Number at Top */}
+        {activeTicket && (
+          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl shadow-2xl p-8 mb-6 text-center">
+            <p className="text-white text-lg mb-3 opacity-90">Your Ticket Number</p>
+            <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 inline-block mb-4">
+              <div className="bg-white rounded-xl p-4 inline-block">
+                <QRCodeSVG
+                  id={`qr-code-top-${activeTicket.ticket_number}`}
+                  value={`TICKET-${activeTicket.ticket_number}`}
+                  size={120}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
             </div>
+            <p className="text-white text-7xl font-bold mb-2">{activeTicket.ticket_number}</p>
+            <div className="flex items-center justify-center gap-6 mt-4">
+              <div className="bg-white/20 rounded-lg px-6 py-3">
+                <p className="text-white text-sm opacity-90">Position</p>
+                <p className="text-white text-3xl font-bold">#{activeTicket.position}</p>
+              </div>
+              <div className="bg-white/20 rounded-lg px-6 py-3">
+                <p className="text-white text-sm opacity-90">Est. Wait</p>
+                <p className="text-white text-3xl font-bold">{activeTicket.estimated_wait_time} min</p>
+              </div>
+              <div className="bg-white/20 rounded-lg px-6 py-3">
+                <p className="text-white text-sm opacity-90">Status</p>
+                <p className="text-white text-xl font-bold capitalize">{activeTicket.status}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => downloadQRCode(activeTicket.ticket_number)}
+              className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-white/20 hover:bg-white/30 rounded-xl transition-all text-white"
+            >
+              <Download className="w-5 h-5" />
+              Download QR Code
+            </button>
+          </div>
+        )}
 
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* QR Code & Ticket Number */}
-              <div className="text-center">
-                <div className="bg-blue-600 rounded-2xl p-6 inline-block mb-4">
-                  <div className="bg-white p-4 rounded-xl">
-                    <QRCodeSVG
-                      id={`qr-code-${activeTicket.ticket_number}`}
-                      value={`TICKET-${activeTicket.ticket_number}`}
-                      size={160}
-                      level="H"
-                      includeMargin={true}
-                    />
+        {/* Customer Information Card */}
+        {activeTicket && (
+          <div className="bg-white rounded-3xl shadow-lg p-8 mb-6 border border-slate-200">
+            <h2 className="text-2xl text-slate-800 mb-6">Your Information</h2>
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Customer Details */}
+              <div className="bg-blue-50 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-blue-600 rounded-lg p-2">
+                    <User className="w-5 h-5 text-white" />
                   </div>
-                  <p className="text-6xl text-white mt-4">{activeTicket.ticket_number}</p>
+                  <span className="text-sm text-slate-600">Customer Name</span>
                 </div>
-                <button
-                  onClick={() => downloadQRCode(activeTicket.ticket_number)}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 transition-all"
-                >
-                  <Download className="w-4 h-4" />
-                  Download QR Code
-                </button>
+                <p className="text-lg text-slate-800 font-semibold">{user?.full_name}</p>
               </div>
 
-              {/* Ticket Details */}
-              <div className="space-y-4">
-                <div className="bg-blue-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Hash className="w-5 h-5 text-blue-600" />
-                    <span className="text-sm text-slate-600">Position in Queue</span>
+              {/* Email */}
+              <div className="bg-purple-50 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-purple-600 rounded-lg p-2">
+                    <Mail className="w-5 h-5 text-white" />
                   </div>
-                  <p className="text-3xl text-blue-600">{activeTicket.position}</p>
+                  <span className="text-sm text-slate-600">Email Address</span>
                 </div>
+                <p className="text-lg text-slate-800 font-semibold truncate">{user?.email}</p>
+              </div>
 
-                <div className="bg-orange-50 rounded-xl p-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Clock className="w-5 h-5 text-orange-600" />
-                    <span className="text-sm text-slate-600">Estimated Wait Time</span>
+              {/* Selected Service */}
+              <div className="bg-teal-50 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-teal-600 rounded-lg p-2">
+                    <Briefcase className="w-5 h-5 text-white" />
                   </div>
-                  <p className="text-3xl text-orange-600">{activeTicket.estimated_wait_time} min</p>
+                  <span className="text-sm text-slate-600">Selected Service</span>
                 </div>
+                <p className="text-lg text-slate-800 font-semibold">{getServiceName()}</p>
+              </div>
+            </div>
 
-                {activeTicket.counter_id && (
-                  <div className="bg-green-50 rounded-xl p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <CheckCircle className="w-5 h-5 text-green-600" />
-                      <span className="text-sm text-slate-600">Assigned Counter</span>
-                    </div>
-                    <p className="text-3xl text-green-600">Counter {activeTicket.counter_id}</p>
+            {/* People Behind in Queue */}
+            <div className="mt-6 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="bg-green-600 rounded-lg p-3">
+                    <Users className="w-6 h-6 text-white" />
                   </div>
+                  <div>
+                    <p className="text-sm text-slate-600">People Behind You</p>
+                    <p className="text-3xl text-green-600 font-bold">{peopleBehind}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-slate-600">Queue Position</p>
+                  <p className="text-2xl text-blue-600 font-bold">#{activeTicket.position}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Ticket Actions */}
+        {activeTicket ? (
+          <div className="bg-white rounded-3xl shadow-lg p-6 mb-8 border border-slate-200">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl text-slate-800 mb-1">Ticket Actions</h2>
+                <p className="text-sm text-slate-600">Manage your queue ticket</p>
+              </div>
+              <div className="flex gap-4">
+                <button
+                  onClick={loadTickets}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                  Refresh Status
+                </button>
+
+                {activeTicket.status === 'waiting' && (
+                  <button
+                    onClick={handleCancelTicket}
+                    disabled={cancelling}
+                    className="flex items-center gap-2 px-6 py-3 border-2 border-red-600 text-red-600 rounded-xl hover:bg-red-50 transition-all disabled:opacity-50"
+                  >
+                    <XCircle className="w-5 h-5" />
+                    {cancelling ? 'Cancelling...' : 'Cancel Ticket'}
+                  </button>
                 )}
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="mt-6 flex gap-4">
-              <button
-                onClick={loadTickets}
-                className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all"
-              >
-                <RefreshCw className="w-5 h-5" />
-                Refresh Status
-              </button>
-
-              {activeTicket.status === 'waiting' && (
-                <button
-                  onClick={handleCancelTicket}
-                  disabled={cancelling}
-                  className="flex items-center gap-2 px-6 py-3 border-2 border-red-600 text-red-600 rounded-xl hover:bg-red-50 transition-all disabled:opacity-50"
-                >
-                  <XCircle className="w-5 h-5" />
-                  {cancelling ? 'Cancelling...' : 'Cancel Ticket'}
-                </button>
-              )}
-            </div>
+            {activeTicket.counter_id && (
+              <div className="mt-4 bg-green-50 border-2 border-green-200 rounded-xl p-4">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                  <div>
+                    <p className="text-sm text-slate-600">Assigned Counter</p>
+                    <p className="text-2xl text-green-600 font-bold">Counter {activeTicket.counter_id}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="bg-white rounded-3xl shadow-lg p-12 text-center mb-8 border border-slate-200">

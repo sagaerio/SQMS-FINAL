@@ -90,19 +90,27 @@ export function ServiceSelection({ industryId, onSelect, onClose, showClose = fa
   useEffect(() => {
     const loadServices = async () => {
       setLoading(true);
-      const { data, error } = await getServicesByIndustry(industryId);
 
-      if (data && data.length > 0) {
-        // Map Supabase services to component format
-        const mappedServices: Service[] = data.map(service => ({
-          id: service.id,
-          name: service.name,
-          description: service.description || '',
-          estimated_time: service.estimated_time
-        }));
-        setServices(mappedServices);
-      } else {
-        // Use fallback mock data
+      try {
+        // Try to fetch services from Supabase
+        const { data, error } = await getServicesByIndustry(industryId);
+
+        if (data && data.length > 0) {
+          // Map Supabase services to component format
+          const mappedServices: Service[] = data.map(service => ({
+            id: service.id,
+            name: service.name,
+            description: service.description || '',
+            estimated_time: service.estimated_time
+          }));
+          setServices(mappedServices);
+        } else {
+          // Use fallback mock data
+          setServices(servicesByIndustry[industryId] || []);
+        }
+      } catch (err) {
+        // If Supabase fails, use mock data
+        console.warn('Failed to load services from Supabase, using mock data:', err);
         setServices(servicesByIndustry[industryId] || []);
       }
 

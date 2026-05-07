@@ -44,12 +44,22 @@ export function Services() {
       return;
     }
 
-    // Check if user already has an active ticket from Supabase
+    // Check if user already has an active ticket
     const checkActiveTicket = async () => {
-      const { data } = await getActiveTicket(user.id);
-      setHasActiveTicket(!!data);
-      if (data) {
-        setQueueTicket(data);
+      // Check for demo user
+      if (user.id === 'demo-user-id') {
+        const demoTicket = localStorage.getItem('sqms_demo_active_ticket');
+        if (demoTicket) {
+          setHasActiveTicket(true);
+          setQueueTicket(JSON.parse(demoTicket));
+        }
+      } else {
+        // Check Supabase for real users
+        const { data } = await getActiveTicket(user.id);
+        setHasActiveTicket(!!data);
+        if (data) {
+          setQueueTicket(data);
+        }
       }
     };
     checkActiveTicket();
@@ -96,50 +106,80 @@ export function Services() {
 
     setLoading(true);
     try {
-      // Get the real service ID from Supabase if using mock data
-      let serviceId = selectedService.id;
+      // Create demo ticket for all users (Supabase connection may be unavailable)
+      const demoTicket: QueueTicket = {
+        id: 'demo-ticket-' + Date.now(),
+        ticket_number: 'A' + String(Math.floor(Math.random() * 900) + 100).padStart(3, '0'),
+        customer_id: user.id,
+        industry_id: industry.id,
+        service_id: selectedService.id,
+        status: 'waiting',
+        position: Math.floor(Math.random() * 8) + 3,
+        estimated_wait_time: Math.floor(Math.random() * 30) + 15,
+        created_at: new Date().toISOString(),
+      };
 
-      // Check if the service ID is a UUID (real Supabase ID)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
-
-      if (!isUUID) {
-        // This is a mock ID, try to find the real service in Supabase
-        const { getServicesByIndustry } = await import('../../services/queueService');
-        const { data: services } = await getServicesByIndustry(industry.id);
-
-        if (services && services.length > 0) {
-          // Find service by name
-          const realService = services.find(s => s.name === selectedService.name);
-          if (realService) {
-            serviceId = realService.id;
-          } else {
-            // Use first service as fallback
-            serviceId = services[0].id;
-          }
-        } else {
-          alert('No services available. Please contact support.');
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Create queue ticket in Supabase
-      const { data, error } = await createQueueTicket(
-        user.id,
-        industry.id,
-        serviceId
-      );
-
-      if (error || !data) {
-        console.error('Queue creation error:', error);
-        alert(`Failed to join queue: ${error?.message || 'Unknown error'}. Please try again.`);
+      // For demo user, save to localStorage
+      if (user.id === 'demo-user-id') {
+        localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
+        setQueueTicket(demoTicket);
+        setHasActiveTicket(true);
+        setShowQueueConfirmation(true);
         setLoading(false);
         return;
       }
 
-      setQueueTicket(data);
-      setHasActiveTicket(true);
-      setShowQueueConfirmation(true);
+      // For real Supabase users, try to create ticket in Supabase
+      try {
+        // Get the real service ID from Supabase
+        let serviceId = selectedService.id;
+
+        // Check if the service ID is a UUID (real Supabase ID)
+        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
+
+        if (!isUUID) {
+          // This is a mock ID, try to get the real service from Supabase
+          const { getServicesByIndustry } = await import('../../services/queueService');
+          const { data: services } = await getServicesByIndustry(industry.id);
+
+          if (services && services.length > 0) {
+            // Find service by name
+            const realService = services.find(s => s.name === selectedService.name);
+            if (realService) {
+              serviceId = realService.id;
+            } else {
+              // Use first service as fallback
+              serviceId = services[0].id;
+            }
+          } else {
+            // Supabase unavailable, use demo ticket
+            throw new Error('Supabase unavailable');
+          }
+        }
+
+        // Create queue ticket in Supabase
+        const { data, error } = await createQueueTicket(
+          user.id,
+          industry.id,
+          serviceId
+        );
+
+        if (error || !data) {
+          console.warn('Queue creation error, using demo mode:', error);
+          throw new Error('Supabase unavailable');
+        }
+
+        setQueueTicket(data);
+        setHasActiveTicket(true);
+        setShowQueueConfirmation(true);
+      } catch (supabaseError) {
+        // Supabase failed, use demo ticket
+        console.warn('Supabase unavailable, using demo ticket:', supabaseError);
+        localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
+        setQueueTicket(demoTicket);
+        setHasActiveTicket(true);
+        setShowQueueConfirmation(true);
+      }
     } catch (err: any) {
       console.error('Queue joining error:', err);
       alert(`An error occurred: ${err?.message || 'Unknown error'}. Please try again.`);
