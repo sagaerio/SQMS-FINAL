@@ -3,13 +3,16 @@ import { useNavigate } from 'react-router';
 import { industries } from '../components/IndustrySelector';
 import { ArrowLeft, LogIn, Shield } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 
 export function StaffPortal() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { setIndustry } = useIndustry();
+  const { signIn } = useAuth();
 
   // Load saved credentials on mount
   useEffect(() => {
@@ -66,23 +69,79 @@ export function StaffPortal() {
     })
   ];
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    const email = loginForm.email.toLowerCase();
+    const email = loginForm.email.toLowerCase().trim();
     const password = loginForm.password;
 
-    // Find matching account
-    const account = allAccounts.find(
-      acc => acc.email === email && acc.password === password
-    );
+    try {
+      // First, try demo accounts for quick testing
+      const demoAccount = allAccounts.find(
+        acc => acc.email === email && acc.password === password
+      );
 
-    if (!account) {
-      setError('Invalid credentials. Please use one of the demo accounts listed below.');
-      return;
+      if (demoAccount) {
+        // Handle demo account login
+        handleDemoLogin(demoAccount);
+        return;
+      }
+
+      // Try Supabase authentication for real users
+      const { error: signInError } = await signIn(email, password);
+
+      if (signInError) {
+        setError('Invalid email or password. If you created an account through sign-up, make sure your role has been set to staff/admin in the database.');
+        setLoading(false);
+        return;
+      }
+
+      // Get user data from localStorage (set by AuthContext after successful login)
+      const userRole = localStorage.getItem('sqms_user_role');
+      const userName = localStorage.getItem('sqms_user_name');
+      const userEmail = localStorage.getItem('sqms_user_email');
+
+      // Verify the user has staff/admin/superadmin role
+      if (!userRole || !['staff', 'admin', 'superadmin'].includes(userRole)) {
+        setError('Access denied. This account does not have staff or admin privileges. Please contact your administrator.');
+        setLoading(false);
+        // Sign them out
+        localStorage.removeItem('sqms_logged_in');
+        return;
+      }
+
+      // Save credentials if remember me is checked
+      if (rememberMe) {
+        localStorage.setItem('sqms_staff_remembered_email', email);
+        localStorage.setItem('sqms_staff_remembered_password', password);
+      } else {
+        localStorage.removeItem('sqms_staff_remembered_email');
+        localStorage.removeItem('sqms_staff_remembered_password');
+      }
+
+      // Get user's industry from localStorage (if set)
+      // The actual industry_id is stored in the users table and should be fetched
+      // For now, we'll rely on the data stored during login
+
+      setLoading(false);
+
+      // Navigate to appropriate dashboard
+      if (userRole === 'staff') {
+        navigate('/staff');
+      } else {
+        navigate('/admin');
+      }
+
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('An unexpected error occurred. Please try again.');
+      setLoading(false);
     }
+  };
 
+  const handleDemoLogin = (account: typeof allAccounts[0]) => {
     // Save credentials if remember me is checked
     if (rememberMe) {
       localStorage.setItem('sqms_staff_remembered_email', loginForm.email);
@@ -95,7 +154,7 @@ export function StaffPortal() {
     // Set user data in localStorage
     localStorage.setItem('sqms_logged_in', 'true');
     localStorage.setItem('sqms_user_role', account.role);
-    localStorage.setItem('sqms_user_email', email);
+    localStorage.setItem('sqms_user_email', account.email);
     localStorage.setItem('sqms_user_name', account.name);
 
     // Set industry context if applicable
@@ -112,6 +171,8 @@ export function StaffPortal() {
         localStorage.setItem('sqms_staff_counter', '3');
       }
     }
+
+    setLoading(false);
 
     // Navigate to appropriate dashboard
     if (account.role === 'staff') {
@@ -193,9 +254,10 @@ export function StaffPortal() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all"
+                disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Login
+                {loading ? 'Logging in...' : 'Login'}
               </button>
             </form>
           </div>
@@ -208,7 +270,8 @@ export function StaffPortal() {
             </div>
 
             <p className="text-sm text-slate-600 mb-6">
-              Use any of these demo accounts to login to the staff portal
+              <strong>Real Users:</strong> Login with your Supabase account email and password.<br/>
+              <strong>Demo/Testing:</strong> Use any of these demo accounts below.
             </p>
 
             <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">

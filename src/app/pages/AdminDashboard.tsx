@@ -64,7 +64,7 @@ const getAvgWaitTime = (estimatedTime: string): number => {
 
 export function AdminDashboard() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [userRole, setUserRole] = useState('admin');
   const [activeSection, setActiveSection] = useState<'main' | 'admin-panel' | 'queue-status' | 'appointments' | 'analytics' | 'support'>('main');
   const [activeTab, setActiveTab] = useState<'services' | 'branches' | 'rules' | 'industry'>('services');
@@ -87,6 +87,21 @@ export function AdminDashboard() {
   const [editingRule, setEditingRule] = useState<QueueRule | null>(null);
   const [showAddService, setShowAddService] = useState(false);
   const [showAddBranch, setShowAddBranch] = useState(false);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/staff-portal');
+      return;
+    }
+
+    // Only allow admin and superadmin to access this page
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      navigate('/dashboard');
+      return;
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const role = user?.role || localStorage.getItem('sqms_user_role') || 'admin';

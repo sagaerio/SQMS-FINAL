@@ -95,6 +95,43 @@ export function Appointments() {
 
     const loadAppointments = async () => {
       setLoading(true);
+
+      // For staff and admin, show all appointments for their industry
+      if (user.role === 'staff' || user.role === 'admin' || user.role === 'superadmin') {
+        // Load all appointments for the industry (not implemented in queueService yet, so using mock for now)
+        const industryKey = industry?.id as keyof typeof industryServices;
+        const servicesForIndustry = industryServices[industryKey] || [];
+
+        // Generate demo appointments for all services in this industry
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        const allIndustryAppointments: SupabaseAppointment[] = servicesForIndustry.flatMap((service, idx) => [
+          {
+            id: `staff-view-${idx}-1`,
+            customer_id: `customer-${idx}-1`,
+            industry_id: industry?.id || 'banking',
+            service_id: service.id,
+            appointment_date: tomorrowStr,
+            appointment_time: ['09:00', '10:00', '11:00', '14:00'][idx % 4],
+            status: ['scheduled', 'confirmed', 'completed'][idx % 3] as any,
+            notes: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            customer: {
+              full_name: ['John Smith', 'Jane Doe', 'Mike Johnson', 'Sarah Williams'][idx % 4],
+              email: `customer${idx}@email.com`
+            }
+          } as any
+        ]);
+
+        setAppointments(allIndustryAppointments);
+        setLoading(false);
+        return;
+      }
+
+      // For customers, show only their appointments
       const { data, error } = await getCustomerAppointments(user.id);
 
       if (data) {
@@ -451,14 +488,16 @@ export function Appointments() {
             Back to Services
           </button>
           <h2 className="text-2xl text-slate-800 mb-6">
-            Appointments for {selectedServiceForView}
+            Appointments for {services.find(s => s.id === selectedServiceForView)?.name}
           </h2>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {appointments
-              .filter(apt => apt.service === selectedServiceForView)
+              .filter(apt => apt.service_id === selectedServiceForView)
               .map((appointment, index) => {
+                const service = services.find(s => s.id === appointment.service_id);
+                const customerName = (appointment as any).customer?.full_name || 'Customer';
                 // Generate ticket number if not exists
-                const ticketNumber = appointment.ticketNumber || `APT-${selectedServiceForView.substring(0, 3).toUpperCase()}-${String(index + 1).padStart(4, '0')}`;
+                const ticketNumber = `APT-${service?.name.substring(0, 3).toUpperCase() || 'GEN'}-${String(index + 1).padStart(4, '0')}`;
                 return (
                   <div key={appointment.id} className="bg-white rounded-2xl shadow-lg overflow-hidden border border-slate-200">
                     <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
@@ -472,8 +511,8 @@ export function Appointments() {
                         <Hash className="w-4 h-4" />
                         <span className="text-sm font-mono">{ticketNumber}</span>
                       </div>
-                      <h3 className="text-xl mb-1">{appointment.customerName}</h3>
-                      <p className="text-white/80 text-sm">{appointment.service}</p>
+                      <h3 className="text-xl mb-1">{customerName}</h3>
+                      <p className="text-white/80 text-sm">{service?.name}</p>
                     </div>
 
                     <div className="p-6 space-y-4">
@@ -483,7 +522,7 @@ export function Appointments() {
                         </div>
                         <div>
                           <div className="text-xs text-slate-500">Date</div>
-                          <div className="text-sm text-slate-800">{formatDate(appointment.date)}</div>
+                          <div className="text-sm text-slate-800">{formatDate(appointment.appointment_date)}</div>
                         </div>
                       </div>
 
@@ -493,23 +532,30 @@ export function Appointments() {
                         </div>
                         <div>
                           <div className="text-xs text-slate-500">Time</div>
-                          <div className="text-sm text-slate-800">{appointment.time}</div>
+                          <div className="text-sm text-slate-800">{formatTime(appointment.appointment_time)}</div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3">
                         <div className="bg-slate-100 rounded-lg p-2">
-                          <Building2 className="w-5 h-5 text-slate-600" />
+                          <User className="w-5 h-5 text-slate-600" />
                         </div>
                         <div>
-                          <div className="text-xs text-slate-500">Location</div>
-                          <div className="text-sm text-slate-800">{appointment.branch}</div>
+                          <div className="text-xs text-slate-500">Customer Email</div>
+                          <div className="text-sm text-slate-800">{(appointment as any).customer?.email || 'N/A'}</div>
                         </div>
                       </div>
 
+                      {appointment.notes && (
+                        <div className="bg-slate-50 rounded-lg p-3">
+                          <div className="text-xs text-slate-500 mb-1">Notes</div>
+                          <div className="text-sm text-slate-700">{appointment.notes}</div>
+                        </div>
+                      )}
+
                       {/* Action Buttons for Staff/Admin */}
                       <div className="flex gap-2 pt-4 border-t border-slate-200">
-                        {appointment.status === 'upcoming' && (
+                        {appointment.status === 'scheduled' && (
                           <button
                             onClick={() => confirmAppointment(appointment.id)}
                             className="flex-1 flex items-center justify-center gap-2 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-sm"

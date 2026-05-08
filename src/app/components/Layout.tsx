@@ -44,7 +44,7 @@ const getNavItems = (userRole: string) => {
     { path: '/staff', icon: Users, label: 'My Counter', roles: ['staff'] },
     { path: '/employees', icon: Users, label: 'Employees', roles: ['admin'] },
     { path: '/services', icon: Briefcase, label: 'Services', roles: ['customer'] },
-    { path: '/status', icon: Bell, label: 'Queue Status', roles: ['admin', 'staff', 'customer'] },
+    { path: '/status', icon: Bell, label: 'Queue Status', roles: ['customer'] },
     { path: '/appointments', icon: Calendar, label: 'Appointments', roles: ['admin', 'staff', 'customer'] },
     { path: '/analytics', icon: BarChart3, label: 'Analytics', roles: ['admin'] },
     { path: '/support', icon: MessageCircle, label: 'Support', roles: ['admin', 'staff', 'customer'] },

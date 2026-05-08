@@ -89,6 +89,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('sqms_user_email', data.email);
       localStorage.setItem('sqms_user_role', data.role);
       localStorage.setItem('sqms_user_name', data.full_name);
+
+      // Save industry-specific data for staff and admins
+      if (data.industry_id) {
+        if (data.role === 'admin') {
+          localStorage.setItem('sqms_admin_industry', data.industry_id);
+        } else if (data.role === 'staff') {
+          localStorage.setItem('sqms_staff_industry', data.industry_id);
+        }
+      }
+
+      // Save counter ID for staff
+      if (data.role === 'staff' && data.counter_id) {
+        localStorage.setItem('sqms_staff_counter', data.counter_id);
+      }
+
+      // Save business ID for admins
+      if (data.role === 'admin' && data.business_id) {
+        localStorage.setItem('sqms_admin_business', data.business_id);
+      }
     } catch (error) {
       console.error('Error loading user profile:', error);
     } finally {

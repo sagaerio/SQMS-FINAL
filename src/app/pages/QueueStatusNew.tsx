@@ -30,6 +30,17 @@ export function QueueStatus() {
       return;
     }
 
+    // Staff and admin should see their dashboard queue view instead
+    if (user.role === 'staff') {
+      navigate('/staff');
+      return;
+    }
+
+    if (user.role === 'admin' || user.role === 'superadmin') {
+      navigate('/admin');
+      return;
+    }
+
     loadTickets();
   }, [user, authLoading, navigate]);
 

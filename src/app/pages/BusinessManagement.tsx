@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Building2, Plus, Edit2, Trash2, X, ArrowLeft, BarChart3, Users, MapPin } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { industries } from '../components/IndustrySelector';
 
 interface Business {
@@ -45,11 +46,27 @@ const mockBusinesses: Business[] = [
 
 export function BusinessManagement() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [businesses, setBusinesses] = useState<Business[]>(mockBusinesses);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingBusiness, setEditingBusiness] = useState<Business | null>(null);
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [employeeCountByIndustry, setEmployeeCountByIndustry] = useState<{ [key: string]: number }>({});
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/staff-portal');
+      return;
+    }
+
+    // Only allow superadmin to access this page
+    if (user.role !== 'superadmin') {
+      navigate('/dashboard');
+      return;
+    }
+  }, [user, authLoading, navigate]);
 
   // Calculate actual employee counts from EmployeeManagement
   useEffect(() => {

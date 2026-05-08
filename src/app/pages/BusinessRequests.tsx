@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Building2, Clock, CheckCircle, XCircle, ArrowLeft, MapPin, Users, Mail, Phone, Plus, Trash2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { industries } from '../components/IndustrySelector';
 
 interface BusinessRequest {
@@ -53,6 +54,7 @@ const mockRequests: BusinessRequest[] = [
 
 export function BusinessRequests() {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const [requests, setRequests] = useState<BusinessRequest[]>(mockRequests);
   const [reviewingRequest, setReviewingRequest] = useState<BusinessRequest | null>(null);
   const [approvalForm, setApprovalForm] = useState({
@@ -69,6 +71,21 @@ export function BusinessRequests() {
     role: 'staff' as 'staff' | 'admin',
     counter: ''
   });
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/staff-portal');
+      return;
+    }
+
+    // Only allow superadmin to access this page
+    if (user.role !== 'superadmin') {
+      navigate('/dashboard');
+      return;
+    }
+  }, [user, authLoading, navigate]);
 
   const handleReviewRequest = (request: BusinessRequest) => {
     setReviewingRequest(request);

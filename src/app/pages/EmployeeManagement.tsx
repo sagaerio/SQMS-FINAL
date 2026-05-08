@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
 import { Users, Plus, Edit2, Trash2, X, ArrowLeft, Building2, UserCheck } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
 import { industries } from '../components/IndustrySelector';
 
 interface Employee {
@@ -37,12 +38,28 @@ const mockEmployees: Employee[] = [
 export function EmployeeManagement() {
   const navigate = useNavigate();
   const { industry } = useIndustry();
+  const { user, loading: authLoading } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>(mockEmployees);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [userRole, setUserRole] = useState('admin');
   const [adminIndustry, setAdminIndustry] = useState<string | null>(null);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>('all');
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/staff-portal');
+      return;
+    }
+
+    // Only allow admin and superadmin to access this page
+    if (user.role !== 'admin' && user.role !== 'superadmin') {
+      navigate('/dashboard');
+      return;
+    }
+  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     const role = localStorage.getItem('sqms_user_role') || 'admin';

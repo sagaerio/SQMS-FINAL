@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Bell, Play, CheckCircle, User, Clock, Hash, AlertTriangle, Building2, Briefcase, Calendar, Plus, X, UserX, RefreshCw, ArrowRightLeft, QrCode, Smartphone, Globe, MessageSquare, Send, UserPlus, Coffee, History, FileText } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useNavigate } from 'react-router';
 import { industryServices } from '../data/industryServices';
 
 interface CustomerHistory {
@@ -38,6 +40,8 @@ interface QueueItem {
 
 export function StaffDashboard() {
   const { industry } = useIndustry();
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [assignedCounter, setAssignedCounter] = useState(3);
   const [staffIndustry, setStaffIndustry] = useState('');
   const [staffInfo, setStaffInfo] = useState({
@@ -66,6 +70,22 @@ export function StaffDashboard() {
   });
   const [customerViewTab, setCustomerViewTab] = useState<'details' | 'history'>('details');
   const [customerNotes, setCustomerNotes] = useState('');
+
+  // Check authentication
+  useEffect(() => {
+    if (authLoading) return;
+
+    if (!user) {
+      navigate('/staff-portal');
+      return;
+    }
+
+    // Only allow staff and admin to access this page
+    if (user.role !== 'staff' && user.role !== 'admin') {
+      navigate('/dashboard');
+      return;
+    }
+  }, [user, authLoading, navigate]);
 
   // Set industry-specific initial queue and services
   useEffect(() => {
