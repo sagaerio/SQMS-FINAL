@@ -4,6 +4,7 @@ import { industries } from '../components/IndustrySelector';
 import { ArrowLeft, LogIn, Shield } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../../lib/supabase';
 
 export function StaffPortal() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
@@ -98,10 +99,62 @@ export function StaffPortal() {
         return;
       }
 
+      // Wait a bit for AuthContext to populate localStorage
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // Get user data from localStorage (set by AuthContext after successful login)
-      const userRole = localStorage.getItem('sqms_user_role');
-      const userName = localStorage.getItem('sqms_user_name');
-      const userEmail = localStorage.getItem('sqms_user_email');
+      let userRole = localStorage.getItem('sqms_user_role');
+      let userName = localStorage.getItem('sqms_user_name');
+      let userEmail = localStorage.getItem('sqms_user_email');
+
+      // If not in localStorage yet, fetch from Supabase directly
+      if (!userRole) {
+        try {
+          const { data: userData, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+          if (userError) throw userError;
+
+          if (userData) {
+            userRole = userData.role;
+            userName = userData.full_name;
+            userEmail = userData.email;
+
+            // Save to localStorage
+            localStorage.setItem('sqms_user_role', userData.role);
+            localStorage.setItem('sqms_user_name', userData.full_name);
+            localStorage.setItem('sqms_user_email', userData.email);
+            localStorage.setItem('sqms_logged_in', 'true');
+
+            // Save industry data if available
+            if (userData.industry_id) {
+              if (userData.role === 'admin') {
+                localStorage.setItem('sqms_admin_industry', userData.industry_id);
+              } else if (userData.role === 'staff') {
+                localStorage.setItem('sqms_staff_industry', userData.industry_id);
+              }
+            }
+
+            // Save counter ID for staff
+            if (userData.role === 'staff' && userData.counter_id) {
+              localStorage.setItem('sqms_staff_counter', userData.counter_id);
+            }
+
+            // Save business ID for admins
+            if (userData.role === 'admin' && userData.business_id) {
+              localStorage.setItem('sqms_admin_business', userData.business_id);
+            }
+          }
+        } catch (err) {
+          console.error('Error fetching user data:', err);
+          setError('Failed to load user profile. Please try again.');
+          setLoading(false);
+          return;
+        }
+      }
 
       // Verify the user has staff/admin/superadmin role
       if (!userRole || !['staff', 'admin', 'superadmin'].includes(userRole)) {
@@ -120,10 +173,6 @@ export function StaffPortal() {
         localStorage.removeItem('sqms_staff_remembered_email');
         localStorage.removeItem('sqms_staff_remembered_password');
       }
-
-      // Get user's industry from localStorage (if set)
-      // The actual industry_id is stored in the users table and should be fetched
-      // For now, we'll rely on the data stored during login
 
       setLoading(false);
 
