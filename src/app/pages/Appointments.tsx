@@ -98,24 +98,29 @@ export function Appointments() {
 
       // For staff and admin, show all appointments for their industry
       if (user.role === 'staff' || user.role === 'admin' || user.role === 'superadmin') {
-        // Load all appointments for the industry
-        const industryKey = industry?.id as keyof typeof industryServices;
-        const servicesForIndustry = services.length > 0 ? services : (industryServices[industryKey] || []);
+        // Use only Supabase services (no mixing with mock data)
+        // If no Supabase services loaded yet, show empty state
+        if (services.length === 0) {
+          setAppointments([]);
+          setLoading(false);
+          return;
+        }
 
-        // Generate demo appointments - ONE per service (not repeated 3 times)
+        // Generate demo appointments - ONE per service, NO DUPLICATES
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-        const allIndustryAppointments: SupabaseAppointment[] = servicesForIndustry.map((service, idx) => ({
-          id: `staff-view-${idx}`,
+        // Create unique appointments based on actual services from database
+        const allIndustryAppointments: SupabaseAppointment[] = services.map((service, idx) => ({
+          id: `demo-apt-${service.id}-${idx}`, // Use service ID to ensure uniqueness
           customer_id: `customer-${idx}`,
           industry_id: industry?.id || 'banking',
-          service_id: typeof service === 'string' ? service : service.id,
+          service_id: service.id,
           appointment_date: tomorrowStr,
           appointment_time: ['09:00', '10:00', '11:00', '14:00', '15:00'][idx % 5],
           status: ['scheduled', 'confirmed', 'completed'][idx % 3] as any,
-          notes: '',
+          notes: 'Demo appointment',
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
           customer: {
@@ -255,9 +260,19 @@ export function Appointments() {
   };
 
   const confirmAppointment = async (id: string) => {
+    // Check if this is a demo appointment (starts with 'demo-apt-')
+    if (id.startsWith('demo-apt-')) {
+      // For demo appointments, just update the local state
+      setAppointments(prev => prev.map(apt =>
+        apt.id === id ? { ...apt, status: 'confirmed' as any } : apt
+      ));
+      return;
+    }
+
+    // For real appointments, update in database
     const { error } = await updateAppointmentStatus(id, 'confirmed');
     if (error) {
-      alert('Failed to confirm appointment');
+      alert('Failed to confirm appointment: ' + error.message);
       return;
     }
 
@@ -271,9 +286,19 @@ export function Appointments() {
   };
 
   const markAsServed = async (id: string) => {
+    // Check if this is a demo appointment
+    if (id.startsWith('demo-apt-')) {
+      // For demo appointments, just update the local state
+      setAppointments(prev => prev.map(apt =>
+        apt.id === id ? { ...apt, status: 'completed' as any } : apt
+      ));
+      return;
+    }
+
+    // For real appointments, update in database
     const { error } = await updateAppointmentStatus(id, 'completed');
     if (error) {
-      alert('Failed to mark as served');
+      alert('Failed to mark as served: ' + error.message);
       return;
     }
 
@@ -290,9 +315,18 @@ export function Appointments() {
     const confirmed = window.confirm('Are you sure you want to cancel this appointment?');
     if (!confirmed) return;
 
+    // Check if this is a demo appointment
+    if (id.startsWith('demo-apt-')) {
+      // For demo appointments, just remove from local state
+      setAppointments(prev => prev.filter(apt => apt.id !== id));
+      alert('Demo appointment cancelled');
+      return;
+    }
+
+    // For real appointments, update in database
     const { error } = await cancelSupabaseAppointment(id);
     if (error) {
-      alert('Failed to cancel appointment');
+      alert('Failed to cancel appointment: ' + error.message);
       return;
     }
 
