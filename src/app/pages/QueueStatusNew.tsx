@@ -21,23 +21,37 @@ export function QueueStatus() {
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
 
+  // Immediate redirect for staff/admin - check on every render
   useEffect(() => {
+    // Check localStorage immediately for role (faster than waiting for user object)
+    const userRole = localStorage.getItem('sqms_user_role');
+
+    if (userRole === 'staff') {
+      navigate('/staff', { replace: true });
+      return;
+    }
+
+    if (userRole === 'admin' || userRole === 'superadmin') {
+      navigate('/admin', { replace: true });
+      return;
+    }
+
     // Wait for auth to finish loading
     if (authLoading) return;
 
     if (!user) {
-      navigate('/login');
+      navigate('/login', { replace: true });
       return;
     }
 
-    // Staff and admin should see their dashboard queue view instead
+    // Double-check with user object
     if (user.role === 'staff') {
-      navigate('/staff');
+      navigate('/staff', { replace: true });
       return;
     }
 
     if (user.role === 'admin' || user.role === 'superadmin') {
-      navigate('/admin');
+      navigate('/admin', { replace: true });
       return;
     }
 
@@ -191,6 +205,22 @@ export function QueueStatus() {
         return 'bg-slate-100 text-slate-600';
     }
   };
+
+  // Check if staff/admin and show redirect message
+  const userRole = user?.role || localStorage.getItem('sqms_user_role');
+  if (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12 flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-slate-600 text-lg mb-2">Redirecting to your dashboard...</p>
+          <p className="text-slate-500 text-sm">
+            {userRole === 'staff' ? 'Staff members use the Staff Dashboard to manage queues.' : 'Admins use the Admin Dashboard for queue management.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

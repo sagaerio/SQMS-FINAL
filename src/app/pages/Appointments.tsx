@@ -98,33 +98,31 @@ export function Appointments() {
 
       // For staff and admin, show all appointments for their industry
       if (user.role === 'staff' || user.role === 'admin' || user.role === 'superadmin') {
-        // Load all appointments for the industry (not implemented in queueService yet, so using mock for now)
+        // Load all appointments for the industry
         const industryKey = industry?.id as keyof typeof industryServices;
-        const servicesForIndustry = industryServices[industryKey] || [];
+        const servicesForIndustry = services.length > 0 ? services : (industryServices[industryKey] || []);
 
-        // Generate demo appointments for all services in this industry
+        // Generate demo appointments - ONE per service (not repeated 3 times)
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
-        const allIndustryAppointments: SupabaseAppointment[] = servicesForIndustry.flatMap((service, idx) => [
-          {
-            id: `staff-view-${idx}-1`,
-            customer_id: `customer-${idx}-1`,
-            industry_id: industry?.id || 'banking',
-            service_id: service.id,
-            appointment_date: tomorrowStr,
-            appointment_time: ['09:00', '10:00', '11:00', '14:00'][idx % 4],
-            status: ['scheduled', 'confirmed', 'completed'][idx % 3] as any,
-            notes: '',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            customer: {
-              full_name: ['John Smith', 'Jane Doe', 'Mike Johnson', 'Sarah Williams'][idx % 4],
-              email: `customer${idx}@email.com`
-            }
-          } as any
-        ]);
+        const allIndustryAppointments: SupabaseAppointment[] = servicesForIndustry.map((service, idx) => ({
+          id: `staff-view-${idx}`,
+          customer_id: `customer-${idx}`,
+          industry_id: industry?.id || 'banking',
+          service_id: typeof service === 'string' ? service : service.id,
+          appointment_date: tomorrowStr,
+          appointment_time: ['09:00', '10:00', '11:00', '14:00', '15:00'][idx % 5],
+          status: ['scheduled', 'confirmed', 'completed'][idx % 3] as any,
+          notes: '',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          customer: {
+            full_name: ['John Smith', 'Jane Doe', 'Mike Johnson', 'Sarah Williams', 'Emily Brown'][idx % 5],
+            email: `customer${idx}@email.com`
+          }
+        } as any));
 
         setAppointments(allIndustryAppointments);
         setLoading(false);
