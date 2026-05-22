@@ -27,6 +27,7 @@ export function Dashboard() {
   const [showServiceSelection, setShowServiceSelection] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const { industry } = useIndustry();
+  const [isCustomerMode, setIsCustomerMode] = useState(false);
 
   useEffect(() => {
     // Wait for auth to finish loading
@@ -38,14 +39,21 @@ export function Dashboard() {
       return;
     }
 
+    // Check customer mode
+    const customerMode = localStorage.getItem('sqms_customer_mode') === 'true';
+    setIsCustomerMode(customerMode);
+
     // Load saved service if exists (but don't show selection modal on login)
-    if (user.role === 'customer') {
+    if (user.role === 'customer' || customerMode) {
       const savedService = localStorage.getItem('sqms_selected_service');
       if (savedService) {
         setSelectedService(JSON.parse(savedService));
       }
     }
   }, [user, loading, navigate]);
+
+  // Determine if user should see customer view
+  const showCustomerView = user?.role === 'customer' || isCustomerMode;
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
@@ -180,17 +188,17 @@ export function Dashboard() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-4xl text-slate-800 mb-3">
-            {user?.role === 'customer' ? `Welcome, ${user?.full_name}` : 'Dashboard'}
+            {showCustomerView ? `Welcome, ${user?.full_name}` : 'Dashboard'}
           </h1>
           <p className="text-xl text-slate-600">
-            {user?.role === 'customer'
+            {showCustomerView
               ? 'Your time is valuable. We help you skip the wait.'
               : 'Smart Queue Management System'}
           </p>
         </div>
 
         {/* Customer Features or Menu Grid */}
-        {user?.role === 'customer' ? (
+        {showCustomerView ? (
           <>
             {/* Customer Quick Actions */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">

@@ -3,6 +3,7 @@ import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download, User, Mai
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { useIndustry } from '../contexts/IndustryContext';
+import { useNotification } from '../contexts/NotificationContext';
 import {
   getActiveTicket,
   getCustomerTickets,
@@ -16,24 +17,29 @@ export function QueueStatus() {
   const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
   const { industry } = useIndustry();
+  const { showNotification } = useNotification();
   const [activeTicket, setActiveTicket] = useState<QueueTicket | null>(null);
   const [allTickets, setAllTickets] = useState<QueueTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
 
-  // Immediate redirect for staff/admin - check on every render
+  // Immediate redirect for staff/admin - check on every render (unless in customer mode)
   useEffect(() => {
     // Check localStorage immediately for role (faster than waiting for user object)
     const userRole = localStorage.getItem('sqms_user_role');
+    const isCustomerMode = localStorage.getItem('sqms_customer_mode') === 'true';
 
-    if (userRole === 'staff') {
-      navigate('/staff', { replace: true });
-      return;
-    }
+    // If in customer mode, allow access to this page
+    if (!isCustomerMode) {
+      if (userRole === 'staff') {
+        navigate('/staff', { replace: true });
+        return;
+      }
 
-    if (userRole === 'admin' || userRole === 'superadmin') {
-      navigate('/admin', { replace: true });
-      return;
+      if (userRole === 'admin' || userRole === 'superadmin') {
+        navigate('/admin', { replace: true });
+        return;
+      }
     }
 
     // Wait for auth to finish loading
@@ -44,15 +50,17 @@ export function QueueStatus() {
       return;
     }
 
-    // Double-check with user object
-    if (user.role === 'staff') {
-      navigate('/staff', { replace: true });
-      return;
-    }
+    // Double-check with user object (only redirect if not in customer mode)
+    if (!isCustomerMode) {
+      if (user.role === 'staff') {
+        navigate('/staff', { replace: true });
+        return;
+      }
 
-    if (user.role === 'admin' || user.role === 'superadmin') {
-      navigate('/admin', { replace: true });
-      return;
+      if (user.role === 'admin' || user.role === 'superadmin') {
+        navigate('/admin', { replace: true });
+        return;
+      }
     }
 
     loadTickets();
@@ -66,11 +74,11 @@ export function QueueStatus() {
       if (payload.eventType === 'UPDATE') {
         setActiveTicket(payload.new as QueueTicket);
 
-        // Show notification for status changes
+        // Show in-app notification for status changes
         if (payload.new.status === 'called') {
-          showNotification('🎉 Your turn is up! Please proceed to your assigned counter.');
+          showNotification('🎉 Your turn is up! Please proceed to your assigned counter.', 'success');
         } else if (payload.new.status === 'serving') {
-          showNotification('✅ You are now being served.');
+          showNotification('✅ You are now being served.', 'success');
         }
       }
     });
@@ -159,12 +167,6 @@ export function QueueStatus() {
     }
   };
 
-  const showNotification = (message: string) => {
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('SQMS Queue Update', { body: message });
-    }
-  };
-
   const downloadQRCode = (ticketNumber: string) => {
     const svg = document.getElementById(`qr-code-${ticketNumber}`);
     if (!svg) return;
@@ -206,9 +208,11 @@ export function QueueStatus() {
     }
   };
 
-  // Check if staff/admin and show redirect message
+  // Check if staff/admin and show redirect message (only if not in customer mode)
   const userRole = user?.role || localStorage.getItem('sqms_user_role');
-  if (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin') {
+  const isCustomerModeActive = localStorage.getItem('sqms_customer_mode') === 'true';
+
+  if (!isCustomerModeActive && (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin')) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12 flex items-center justify-center">
         <div className="text-center">

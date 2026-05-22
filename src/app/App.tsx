@@ -3,6 +3,7 @@ import { router } from './routes';
 import { NotificationSystem } from './components/NotificationSystem';
 import { IndustryProvider } from './contexts/IndustryContext';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
 import { useEffect } from 'react';
 
@@ -52,9 +53,11 @@ export default function App() {
   return (
     <AuthProvider>
       <IndustryProvider>
-        <NotificationSystem />
-        <RouterProvider router={router} />
-        <PwaInstallPrompt />
+        <NotificationProvider>
+          <NotificationSystem />
+          <RouterProvider router={router} />
+          <PwaInstallPrompt />
+        </NotificationProvider>
       </IndustryProvider>
     </AuthProvider>
   );

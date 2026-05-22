@@ -17,7 +17,8 @@ import {
   Users,
   MessageSquare,
   Building2,
-  FileText
+  FileText,
+  ShoppingBag
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useIndustry } from '../contexts/IndustryContext';
@@ -26,7 +27,18 @@ import { IndustrySelector } from './IndustrySelector';
 import type { Industry } from './IndustrySelector';
 
 // Navigation items based on user roles
-const getNavItems = (userRole: string) => {
+const getNavItems = (userRole: string, isCustomerMode: boolean) => {
+  // If in customer mode (staff/admin acting as customer)
+  if (isCustomerMode && (userRole === 'staff' || userRole === 'admin' || userRole === 'superadmin')) {
+    return [
+      { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['customer'] },
+      { path: '/services', icon: Briefcase, label: 'Services', roles: ['customer'] },
+      { path: '/status', icon: Bell, label: 'Queue Status', roles: ['customer'] },
+      { path: '/appointments', icon: Calendar, label: 'Appointments', roles: ['customer'] },
+      { path: '/support', icon: MessageCircle, label: 'Support', roles: ['customer'] },
+    ];
+  }
+
   // Super admin has different navigation
   if (userRole === 'superadmin') {
     return [
@@ -62,6 +74,8 @@ export function Layout() {
   const [userEmail, setUserEmail] = useState('');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('customer');
+  const [actualRole, setActualRole] = useState('customer');
+  const [isCustomerMode, setIsCustomerMode] = useState(false);
   const [navItems, setNavItems] = useState<any[]>([]);
   const { industry, setIndustry } = useIndustry();
   const { user, signOut } = useAuth();
@@ -71,14 +85,28 @@ export function Layout() {
     const email = user?.email || localStorage.getItem('sqms_user_email') || 'demo@sqms.com';
     const role = user?.role || localStorage.getItem('sqms_user_role') || 'customer';
     const name = user?.full_name || localStorage.getItem('sqms_user_name') || 'Demo User';
+    const customerMode = localStorage.getItem('sqms_customer_mode') === 'true';
 
     setUserEmail(email);
-    setUserRole(role);
+    setActualRole(role);
     setUserName(name);
-    setNavItems(getNavItems(role));
+    setIsCustomerMode(customerMode);
+    setUserRole(role);
+    setNavItems(getNavItems(role, customerMode));
 
     // Don't auto-show industry selector on login for customers
   }, [industry, user]);
+
+  const toggleCustomerMode = () => {
+    const newMode = !isCustomerMode;
+    setIsCustomerMode(newMode);
+    localStorage.setItem('sqms_customer_mode', String(newMode));
+    setNavItems(getNavItems(actualRole, newMode));
+    setProfileMenuOpen(false);
+
+    // Navigate to dashboard when switching modes
+    navigate('/dashboard');
+  };
 
   const handleLogout = async () => {
     await signOut();
@@ -149,8 +177,36 @@ export function Layout() {
                     <div className="px-4 py-3 border-b border-slate-200">
                       <p className="text-sm text-slate-800">{userName}</p>
                       <p className="text-xs text-slate-500">{userEmail}</p>
-                      <p className="text-xs text-blue-600 mt-1 capitalize">{userRole}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-xs text-blue-600 capitalize">{actualRole}</p>
+                        {isCustomerMode && (
+                          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                            Customer Mode
+                          </span>
+                        )}
+                      </div>
                     </div>
+
+                    {/* Customer Mode Toggle - Only for Staff/Admin/Superadmin */}
+                    {(actualRole === 'staff' || actualRole === 'admin' || actualRole === 'superadmin') && (
+                      <button
+                        onClick={toggleCustomerMode}
+                        className="w-full flex items-center justify-between px-4 py-3 text-slate-700 hover:bg-slate-100 transition-all border-b border-slate-200"
+                      >
+                        <div className="flex items-center gap-3">
+                          <ShoppingBag className="w-4 h-4" />
+                          <span className="text-sm">Customer Mode</span>
+                        </div>
+                        <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                          isCustomerMode ? 'bg-green-600' : 'bg-slate-300'
+                        }`}>
+                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isCustomerMode ? 'translate-x-5' : 'translate-x-0.5'
+                          }`} />
+                        </div>
+                      </button>
+                    )}
+
                     <button
                       onClick={() => {
                         setProfileMenuOpen(false);

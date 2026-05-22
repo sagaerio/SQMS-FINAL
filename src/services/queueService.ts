@@ -551,3 +551,61 @@ export const updateUserRole = async (userId: string, role: 'customer' | 'staff' 
     return { error: error as Error };
   }
 };
+
+// =====================================================
+// ANALYTICS
+// =====================================================
+
+export const getAnalyticsByIndustry = async (industryId: string) => {
+  try {
+    // Get total tickets for this industry
+    const { data: tickets, error: ticketsError } = await supabase
+      .from('queue_tickets')
+      .select('*, service:services(name), customer:users(full_name)')
+      .eq('industry_id', industryId);
+
+    if (ticketsError) throw ticketsError;
+
+    // Get appointments
+    const { data: appointments, error: appointmentsError } = await supabase
+      .from('appointments')
+      .select('*, service:services(name)')
+      .eq('industry_id', industryId);
+
+    if (appointmentsError) throw appointmentsError;
+
+    return {
+      tickets: tickets || [],
+      appointments: appointments || [],
+      error: null
+    };
+  } catch (error) {
+    return { tickets: [], appointments: [], error: error as Error };
+  }
+};
+
+export const getAllAnalytics = async () => {
+  try {
+    // Get all tickets
+    const { data: tickets, error: ticketsError } = await supabase
+      .from('queue_tickets')
+      .select('*, service:services(name), customer:users(full_name), industry:industries(name)');
+
+    if (ticketsError) throw ticketsError;
+
+    // Get all appointments
+    const { data: appointments, error: appointmentsError } = await supabase
+      .from('appointments')
+      .select('*, service:services(name), industry:industries(name)');
+
+    if (appointmentsError) throw appointmentsError;
+
+    return {
+      tickets: tickets || [],
+      appointments: appointments || [],
+      error: null
+    };
+  } catch (error) {
+    return { tickets: [], appointments: [], error: error as Error };
+  }
+};
