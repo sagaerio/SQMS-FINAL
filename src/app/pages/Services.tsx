@@ -167,79 +167,56 @@ export function Services() {
 
     setLoading(true);
     try {
-      // Create demo ticket for all users (Supabase connection may be unavailable)
-      const demoTicket: QueueTicket = {
-        id: 'demo-ticket-' + Date.now(),
-        ticket_number: 'A' + String(Math.floor(Math.random() * 900) + 100).padStart(3, '0'),
-        customer_id: user.id,
-        industry_id: selectedIndustry.id,
-        service_id: selectedService.id,
-        branch_id: selectedBranch,
-        status: 'waiting',
-        position: Math.floor(Math.random() * 8) + 3,
-        estimated_wait_time: Math.floor(Math.random() * 30) + 15,
-        created_at: new Date().toISOString(),
-      };
+      // Get the real service ID from Supabase
+      let serviceId = selectedService.id;
 
-      // For demo user, save to localStorage
-      if (user.id === 'demo-user-id') {
-        localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
-        setQueueTicket(demoTicket);
-        setHasActiveTicket(true);
-        setStep('confirmation');
+      // Check if the service ID is a UUID (real Supabase ID)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
+
+      if (!isUUID) {
+        // This is a mock ID, try to get the real service from Supabase
+        if (services && services.length > 0) {
+          // Find service by name
+          const realService = services.find(s => s.name === selectedService.name);
+          if (realService) {
+            serviceId = realService.id;
+          } else {
+            alert('Unable to find service. Please try selecting a different service.');
+            setLoading(false);
+            return;
+          }
+        } else {
+          alert('Services not loaded. Please refresh the page and try again.');
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Create queue ticket in Supabase
+      const { data, error } = await createQueueTicket(
+        user.id,
+        selectedIndustry.id,
+        serviceId,
+        selectedBranch
+      );
+
+      if (error) {
+        console.error('Queue creation error:', error);
+        alert(`Failed to join queue: ${error.message}. Please try again.`);
         setLoading(false);
         return;
       }
 
-      // For real Supabase users, try to create ticket in Supabase
-      try {
-        // Get the real service ID from Supabase
-        let serviceId = selectedService.id;
-
-        // Check if the service ID is a UUID (real Supabase ID)
-        const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
-
-        if (!isUUID) {
-          // This is a mock ID, try to get the real service from Supabase
-          if (services && services.length > 0) {
-            // Find service by name
-            const realService = services.find(s => s.name === selectedService.name);
-            if (realService) {
-              serviceId = realService.id;
-            } else {
-              // Use first service as fallback
-              serviceId = services[0].id;
-            }
-          } else {
-            // Supabase unavailable, use demo ticket
-            throw new Error('Supabase unavailable');
-          }
-        }
-
-        // Create queue ticket in Supabase
-        const { data, error } = await createQueueTicket(
-          user.id,
-          selectedIndustry.id,
-          serviceId,
-          selectedBranch
-        );
-
-        if (error || !data) {
-          console.warn('Queue creation error, using demo mode:', error);
-          throw new Error('Supabase unavailable');
-        }
-
-        setQueueTicket(data);
-        setHasActiveTicket(true);
-        setStep('confirmation');
-      } catch (supabaseError) {
-        // Supabase failed, use demo ticket
-        console.warn('Supabase unavailable, using demo ticket:', supabaseError);
-        localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
-        setQueueTicket(demoTicket);
-        setHasActiveTicket(true);
-        setStep('confirmation');
+      if (!data) {
+        alert('Failed to create ticket. Please try again.');
+        setLoading(false);
+        return;
       }
+
+      // Success - ticket created in Supabase
+      setQueueTicket(data);
+      setHasActiveTicket(true);
+      setStep('confirmation');
     } catch (err: any) {
       console.error('Queue joining error:', err);
       alert(`An error occurred: ${err?.message || 'Unknown error'}. Please try again.`);

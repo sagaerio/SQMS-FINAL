@@ -235,6 +235,7 @@ export function Appointments() {
       selectedService.id,
       formData.date,
       formData.time,
+      formData.branch || undefined,
       formData.notes
     );
 
