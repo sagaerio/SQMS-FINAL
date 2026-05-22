@@ -4,6 +4,7 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { SignUp } from "./pages/SignUp";
 import { ForgotPassword } from "./pages/ForgotPassword";
+import { ResetPassword } from "./pages/ResetPassword";
 import { Dashboard } from "./pages/Dashboard";
 import { Profile } from "./pages/Profile";
 import { QueueStatus } from "./pages/QueueStatusNew";
@@ -46,6 +47,11 @@ export const router = createBrowserRouter([
   {
     path: "/forgot-password",
     Component: ForgotPassword,
+    ErrorBoundary: ErrorBoundaryPage,
+  },
+  {
+    path: "/reset-password",
+    Component: ResetPassword,
     ErrorBoundary: ErrorBoundaryPage,
   },
   // Protected routes (with navigation)

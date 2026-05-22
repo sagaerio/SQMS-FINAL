@@ -1,72 +1,46 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Mail, Key, ArrowLeft, Send } from 'lucide-react';
+import { Mail, ArrowLeft, Send, CheckCircle } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { useNotification } from '../contexts/NotificationContext';
 
 export function ForgotPassword() {
   const navigate = useNavigate();
-  const [step, setStep] = useState<'email' | 'code' | 'newPassword'>('email');
+  const { showNotification } = useNotification();
   const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
   const [error, setError] = useState('');
-  const [generatedCode, setGeneratedCode] = useState('');
 
-  const handleSendCode = (e: React.FormEvent) => {
+  const handleSendResetEmail = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
 
-    // Generate a random 6-digit code
-    const randomCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedCode(randomCode);
+    try {
+      // Send password reset email via Supabase Auth
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
 
-    // Mock sending email
-    alert(`Password reset code sent to ${email}\n\nYour code is: ${randomCode}\n\n(In production, this would be sent via email)`);
-    setStep('code');
-  };
-
-  const handleVerifyCode = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (code === generatedCode) {
-      setStep('newPassword');
-    } else {
-      setError('Invalid code. Please try again.');
+      if (error) {
+        setError(error.message);
+        showNotification(`Error: ${error.message}`, 'error');
+      } else {
+        setEmailSent(true);
+        showNotification('Password reset email sent! Check your inbox.', 'success', 10000);
+      }
+    } catch (err: any) {
+      setError('Failed to send reset email. Please try again.');
+      showNotification('Failed to send reset email', 'error');
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const handleResetPassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-
-    if (newPassword !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return;
-    }
-
-    // Store the new password
-    localStorage.setItem(`sqms_password_${email}`, newPassword);
-
-    // Update remembered password if this email was remembered
-    const rememberedEmail = localStorage.getItem('sqms_remembered_email');
-    if (rememberedEmail === email) {
-      localStorage.setItem('sqms_remembered_password', newPassword);
-    }
-
-    alert('Password reset successfully!\n\nYou can now sign in with your new password.');
-    navigate('/login');
   };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-orange-50 flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full">
-        {/* Forgot Password Form */}
         <div className="bg-white rounded-3xl shadow-2xl p-8 md:p-10 border border-blue-200">
           {/* Back Button */}
           <button
@@ -77,134 +51,87 @@ export function ForgotPassword() {
             Back to Login
           </button>
 
-          <h2 className="text-3xl mb-2 text-slate-800">Reset Password</h2>
-          <p className="text-slate-600 mb-8">
-            {step === 'email' && 'Enter your email to receive a reset code'}
-            {step === 'code' && 'Enter the code sent to your email'}
-            {step === 'newPassword' && 'Create your new password'}
-          </p>
+          {!emailSent ? (
+            <>
+              <h2 className="text-3xl mb-2 text-slate-800">Reset Password</h2>
+              <p className="text-slate-600 mb-8">
+                Enter your email address and we'll send you a link to reset your password.
+              </p>
 
-          {/* Step 1: Email */}
-          {step === 'email' && (
-            <form onSubmit={handleSendCode} className="space-y-6">
-              <div>
-                <label className="text-sm text-slate-600 mb-2 block">Email Address</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="user@example.com"
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
+              <form onSubmit={handleSendResetEmail} className="space-y-6">
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
+                    {error}
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-sm text-slate-600 mb-2 block">Email Address</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="user@example.com"
+                      className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      required
+                      disabled={loading}
+                    />
+                  </div>
                 </div>
-              </div>
 
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" />
+                      Send Reset Link
+                    </>
+                  )}
+                </button>
+              </form>
+            </>
+          ) : (
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-10 h-10 text-green-600" />
+              </div>
+              <h2 className="text-3xl mb-2 text-slate-800">Check Your Email</h2>
+              <p className="text-slate-600 mb-6">
+                We've sent a password reset link to <strong>{email}</strong>
+              </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 text-left">
+                <h3 className="font-semibold text-blue-900 mb-2">Next Steps:</h3>
+                <ol className="text-sm text-blue-800 space-y-2 list-decimal list-inside">
+                  <li>Check your email inbox</li>
+                  <li>Click the reset password link</li>
+                  <li>Create your new password</li>
+                  <li>Sign in with your new password</li>
+                </ol>
+              </div>
+              <p className="text-sm text-slate-500 mb-4">
+                Didn't receive the email? Check your spam folder or try again.
+              </p>
               <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                onClick={() => {
+                  setEmailSent(false);
+                  setEmail('');
+                  setError('');
+                }}
+                className="text-blue-600 hover:underline text-sm font-medium"
               >
-                <Send className="w-5 h-5" />
-                Send Reset Code
+                Send Another Link
               </button>
-            </form>
-          )}
-
-          {/* Step 2: Verify Code */}
-          {step === 'code' && (
-            <form onSubmit={handleVerifyCode} className="space-y-6">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
-                  {error}
-                </div>
-              )}
-
-              <div className="bg-blue-50 border border-blue-200 text-blue-600 px-4 py-3 rounded-xl text-sm">
-                A 6-digit code has been sent to {email}
-              </div>
-
-              <div>
-                <label className="text-sm text-slate-600 mb-2 block">Verification Code</label>
-                <div className="relative">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={code}
-                    onChange={(e) => setCode(e.target.value)}
-                    placeholder="Enter 6-digit code"
-                    maxLength={6}
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                Verify Code
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSendCode(new Event('submit') as any)}
-                className="w-full text-blue-600 hover:underline text-sm"
-              >
-                Resend Code
-              </button>
-            </form>
-          )}
-
-          {/* Step 3: New Password */}
-          {step === 'newPassword' && (
-            <form onSubmit={handleResetPassword} className="space-y-6">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl text-sm">
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label className="text-sm text-slate-600 mb-2 block">New Password</label>
-                <div className="relative">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="password"
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Create a new password"
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm text-slate-600 mb-2 block">Confirm Password</label>
-                <div className="relative">
-                  <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                  <input
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Re-enter your password"
-                    className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-              >
-                <Key className="w-5 h-5" />
-                Reset Password
-              </button>
-            </form>
+            </div>
           )}
         </div>
       </div>
