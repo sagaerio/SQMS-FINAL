@@ -243,7 +243,7 @@ export function StaffPortal() {
           <span>Back to Home</span>
         </button>
 
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="max-w-md mx-auto">
           {/* Login Form */}
           <div className="bg-white rounded-3xl shadow-2xl p-8 border border-blue-200">
             {/* Login Header */}
@@ -309,109 +309,6 @@ export function StaffPortal() {
                 {loading ? 'Logging in...' : 'Login'}
               </button>
             </form>
-          </div>
-
-          {/* Demo Credentials */}
-          <div className="bg-white rounded-3xl shadow-2xl p-8 border border-blue-200">
-            <div className="flex items-center gap-3 mb-6">
-              <Shield className="w-6 h-6 text-blue-600" />
-              <h3 className="text-2xl text-slate-800">Demo Login Credentials</h3>
-            </div>
-
-            <p className="text-sm text-slate-600 mb-6">
-              <strong>Real Users:</strong> Login with your Supabase account email and password.<br/>
-              <strong>Demo/Testing:</strong> Use any of these demo accounts below.
-            </p>
-
-            <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-              {/* Super Admin */}
-              <div className="bg-gradient-to-r from-purple-50 to-purple-100 border-2 border-purple-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="bg-purple-600 rounded-lg px-3 py-1 text-xs text-white font-semibold">
-                    SUPER ADMIN
-                  </div>
-                </div>
-                <div className="space-y-1 text-sm">
-                  <p className="text-slate-700">
-                    <strong>Email:</strong> {allAccounts[0].email}
-                  </p>
-                  <p className="text-slate-700">
-                    <strong>Password:</strong> {allAccounts[0].password}
-                  </p>
-                  <p className="text-xs text-slate-600 mt-2">{allAccounts[0].description}</p>
-                </div>
-              </div>
-
-              {/* Industry Admins */}
-              <div className="border-t-2 border-slate-200 pt-4 mt-4">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase">Industry Admins</h4>
-                <div className="space-y-3">
-                  {allAccounts.slice(1, 7).map((account, index) => {
-                    const industry = industries.find(i => i.id === account.industry);
-                    const Icon = industry?.icon;
-                    return (
-                      <div key={index} className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          {Icon && (
-                            <div className={`bg-gradient-to-r ${industry.color} rounded p-1`}>
-                              <Icon className="w-4 h-4 text-white" />
-                            </div>
-                          )}
-                          <div className="bg-blue-600 rounded-lg px-3 py-1 text-xs text-white font-semibold">
-                            ADMIN
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <p className="text-slate-700">
-                            <strong>Email:</strong> {account.email}
-                          </p>
-                          <p className="text-slate-700">
-                            <strong>Password:</strong> {account.password}
-                          </p>
-                          <p className="text-xs text-slate-600 mt-2">{account.description}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Industry Staff */}
-              <div className="border-t-2 border-slate-200 pt-4 mt-4">
-                <h4 className="text-sm font-semibold text-slate-700 mb-3 uppercase">Industry Staff</h4>
-                <div className="space-y-3">
-                  {allAccounts.slice(7).map((account, index) => {
-                    const industry = industries.find(i => i.id === account.industry);
-                    const Icon = industry?.icon;
-                    return (
-                      <div key={index} className="bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
-                        <div className="flex items-center gap-2 mb-2">
-                          {Icon && (
-                            <div className={`bg-gradient-to-r ${industry.color} rounded p-1`}>
-                              <Icon className="w-4 h-4 text-white" />
-                            </div>
-                          )}
-                          <div className="bg-slate-600 rounded-lg px-3 py-1 text-xs text-white font-semibold">
-                            STAFF
-                          </div>
-                        </div>
-                        <div className="space-y-1 text-sm">
-                          <p className="text-slate-700">
-                            <strong>Email:</strong> {account.email}
-                          </p>
-                          <p className="text-slate-700">
-                            <strong>Password:</strong> {account.password}
-                          </p>
-                          <p className="text-xs text-slate-600 mt-2">
-                            {account.name} - {account.description}
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>

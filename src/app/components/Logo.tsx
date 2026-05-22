@@ -58,7 +58,7 @@ export function Logo({ className = "w-48" }: { className?: string }) {
         </defs>
         <g filter="url(#filter0_iii_3051_46989)">
           <g clipPath="url(#clip0_3051_46989)">
-            <rect width="48" height="48" rx="12" fill="#2563EB"/>
+            <rect width="48" height="48" rx="12" fill="#1e40af"/>
             <rect width="48" height="48" fill="url(#paint0_linear_3051_46989)"/>
             <g filter="url(#filter1_d_3051_46989)">
               <path fillRule="evenodd" clipRule="evenodd" d="M23.9968 32.495C28.6902 32.495 32.495 28.6902 32.495 23.9968C32.495 19.3034 28.6902 15.4986 23.9968 15.4986C19.3034 15.4986 15.4986 19.3034 15.4986 23.9968C15.4986 28.6902 19.3034 32.495 23.9968 32.495ZM23.9968 38.9936C32.2793 38.9936 38.9936 32.2793 38.9936 23.9968C38.9936 15.7143 32.2793 9 23.9968 9C15.7143 9 9 15.7143 9 23.9968C9 32.2793 15.7143 38.9936 23.9968 38.9936Z" fill="url(#paint1_linear_3051_46989)"/>

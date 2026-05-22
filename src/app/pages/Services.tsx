@@ -11,27 +11,32 @@ import {
   Ticket,
   Users,
   Navigation,
-  Download
+  Download,
+  Briefcase
 } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useIndustry } from '../contexts/IndustryContext';
 import { useAuth } from '../contexts/AuthContext';
-import { ServiceSelection, servicesByIndustry } from '../components/ServiceSelection';
+import { servicesByIndustry } from '../components/ServiceSelection';
 import type { Service } from '../components/ServiceSelection';
 import { branches as allBranches } from '../data/businessTypes';
 import { QRCodeSVG } from 'qrcode.react';
-import { createQueueTicket, getActiveTicket } from '../../services/queueService';
+import { createQueueTicket, getActiveTicket, getServicesByIndustry } from '../../services/queueService';
 import type { QueueTicket } from '../../lib/supabase';
+import { industries } from '../components/IndustrySelector';
+import type { Industry } from '../components/IndustrySelector';
 
 export function Services() {
-  const [showServiceSelection, setShowServiceSelection] = useState(false);
+  const [step, setStep] = useState<'industry' | 'service' | 'branch' | 'confirmation'>('industry');
+  const [selectedIndustry, setSelectedIndustry] = useState<Industry | null>(null);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [showQueueConfirmation, setShowQueueConfirmation] = useState(false);
   const [queueTicket, setQueueTicket] = useState<QueueTicket | null>(null);
   const [hasActiveTicket, setHasActiveTicket] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { industry } = useIndustry();
+  const [services, setServices] = useState<Service[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const { setIndustry } = useIndustry();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -63,18 +68,48 @@ export function Services() {
       }
     };
     checkActiveTicket();
-
-    // Check if user already has a selected service from dashboard
-    const savedService = localStorage.getItem('sqms_selected_service');
-    if (savedService) {
-      setSelectedService(JSON.parse(savedService));
-    }
   }, [user, authLoading, navigate]);
+
+  // Load services when industry is selected
+  useEffect(() => {
+    if (!selectedIndustry) return;
+
+    const loadServices = async () => {
+      setLoadingServices(true);
+      try {
+        const { data } = await getServicesByIndustry(selectedIndustry.id);
+        if (data && data.length > 0) {
+          const mappedServices: Service[] = data.map(service => ({
+            id: service.id,
+            name: service.name,
+            description: service.description || '',
+            estimated_time: service.estimated_time
+          }));
+          setServices(mappedServices);
+        } else {
+          // Use fallback mock data
+          setServices(servicesByIndustry[selectedIndustry.id] || []);
+        }
+      } catch (err) {
+        console.warn('Failed to load services, using mock data:', err);
+        setServices(servicesByIndustry[selectedIndustry.id] || []);
+      }
+      setLoadingServices(false);
+    };
+
+    loadServices();
+  }, [selectedIndustry]);
+
+  const handleIndustrySelect = (industry: Industry) => {
+    setSelectedIndustry(industry);
+    setIndustry(industry); // Save to context
+    setStep('service');
+  };
 
   const handleServiceSelect = (service: Service) => {
     setSelectedService(service);
     localStorage.setItem('sqms_selected_service', JSON.stringify(service));
-    setShowServiceSelection(false);
+    setStep('branch');
   };
 
   const downloadQRCode = () => {
@@ -93,7 +128,7 @@ export function Services() {
       const pngFile = canvas.toDataURL('image/png');
 
       const downloadLink = document.createElement('a');
-      downloadLink.download = `ticket-${queueNumber}.png`;
+      downloadLink.download = `ticket-${queueTicket?.ticket_number}.png`;
       downloadLink.href = pngFile;
       downloadLink.click();
     };
@@ -102,7 +137,7 @@ export function Services() {
   };
 
   const handleJoinQueue = async () => {
-    if (!selectedService || !selectedBranch || hasActiveTicket || !user || !industry) return;
+    if (!selectedService || !selectedBranch || hasActiveTicket || !user || !selectedIndustry) return;
 
     setLoading(true);
     try {
@@ -111,7 +146,7 @@ export function Services() {
         id: 'demo-ticket-' + Date.now(),
         ticket_number: 'A' + String(Math.floor(Math.random() * 900) + 100).padStart(3, '0'),
         customer_id: user.id,
-        industry_id: industry.id,
+        industry_id: selectedIndustry.id,
         service_id: selectedService.id,
         status: 'waiting',
         position: Math.floor(Math.random() * 8) + 3,
@@ -124,7 +159,7 @@ export function Services() {
         localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
         setQueueTicket(demoTicket);
         setHasActiveTicket(true);
-        setShowQueueConfirmation(true);
+        setStep('confirmation');
         setLoading(false);
         return;
       }
@@ -139,9 +174,6 @@ export function Services() {
 
         if (!isUUID) {
           // This is a mock ID, try to get the real service from Supabase
-          const { getServicesByIndustry } = await import('../../services/queueService');
-          const { data: services } = await getServicesByIndustry(industry.id);
-
           if (services && services.length > 0) {
             // Find service by name
             const realService = services.find(s => s.name === selectedService.name);
@@ -160,7 +192,7 @@ export function Services() {
         // Create queue ticket in Supabase
         const { data, error } = await createQueueTicket(
           user.id,
-          industry.id,
+          selectedIndustry.id,
           serviceId
         );
 
@@ -171,14 +203,14 @@ export function Services() {
 
         setQueueTicket(data);
         setHasActiveTicket(true);
-        setShowQueueConfirmation(true);
+        setStep('confirmation');
       } catch (supabaseError) {
         // Supabase failed, use demo ticket
         console.warn('Supabase unavailable, using demo ticket:', supabaseError);
         localStorage.setItem('sqms_demo_active_ticket', JSON.stringify(demoTicket));
         setQueueTicket(demoTicket);
         setHasActiveTicket(true);
-        setShowQueueConfirmation(true);
+        setStep('confirmation');
       }
     } catch (err: any) {
       console.error('Queue joining error:', err);
@@ -188,31 +220,10 @@ export function Services() {
     }
   };
 
-  const branches = allBranches.filter(b => b.businessType === industry?.id);
-
-  // If no service selected, redirect to dashboard
-  if (!selectedService && !showServiceSelection) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-lg p-12 text-center border-2 border-slate-200">
-            <Ticket className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-            <h3 className="text-2xl text-slate-800 mb-2">No Service Selected</h3>
-            <p className="text-slate-600 mb-6">Please select a service from the dashboard first.</p>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
-            >
-              Go to Dashboard
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const branches = selectedIndustry ? allBranches.filter(b => b.businessType === selectedIndustry.id) : [];
 
   // Show queue confirmation
-  if (showQueueConfirmation) {
+  if (step === 'confirmation' && queueTicket) {
     return (
       <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
         <div className="max-w-2xl mx-auto">
@@ -226,13 +237,13 @@ export function Services() {
               <div className="bg-white p-6 rounded-xl mb-4 inline-block">
                 <QRCodeSVG
                   id="qr-code-svg"
-                  value={`TICKET-${queueTicket?.ticket_number || ''}`}
+                  value={`TICKET-${queueTicket.ticket_number || ''}`}
                   size={160}
                   level="H"
                   includeMargin={true}
                 />
               </div>
-              <p className="text-6xl mb-2">{queueTicket?.ticket_number}</p>
+              <p className="text-6xl mb-2">{queueTicket.ticket_number}</p>
               <p className="text-lg opacity-90 mb-4">Please wait for your turn</p>
               <button
                 onClick={downloadQRCode}
@@ -245,11 +256,12 @@ export function Services() {
             <div className="bg-blue-50 rounded-xl p-6 mb-6 text-left">
               <h3 className="font-semibold text-slate-800 mb-4">Queue Details:</h3>
               <div className="space-y-2 text-sm text-slate-600">
+                <p><strong>Industry:</strong> {selectedIndustry?.name}</p>
                 <p><strong>Service:</strong> {selectedService?.name}</p>
                 <p><strong>Branch:</strong> {allBranches.find(b => b.id === selectedBranch)?.name}</p>
-                <p><strong>Position:</strong> <span className="text-blue-600 font-semibold">#{queueTicket?.position}</span></p>
-                <p><strong>Estimated Wait:</strong> <span className="text-orange-600">{queueTicket?.estimated_wait_time} min</span></p>
-                <p><strong>Status:</strong> <span className="text-green-600 capitalize">{queueTicket?.status}</span></p>
+                <p><strong>Position:</strong> <span className="text-blue-600 font-semibold">#{queueTicket.position}</span></p>
+                <p><strong>Estimated Wait:</strong> <span className="text-orange-600">{queueTicket.estimated_wait_time} min</span></p>
+                <p><strong>Status:</strong> <span className="text-green-600 capitalize">{queueTicket.status}</span></p>
               </div>
             </div>
             <div className="flex gap-4">
@@ -261,7 +273,9 @@ export function Services() {
               </button>
               <button
                 onClick={() => {
-                  setShowQueueConfirmation(false);
+                  setStep('industry');
+                  setSelectedIndustry(null);
+                  setSelectedService(null);
                   setSelectedBranch('');
                 }}
                 className="flex-1 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-xl hover:bg-blue-50 transition-all"
@@ -275,55 +289,143 @@ export function Services() {
     );
   }
 
-  const IndustryIcon = industry?.icon;
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            <span>Back to Dashboard</span>
-          </button>
-
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl text-slate-800 mb-2">Virtual Queue</h1>
-              <p className="text-xl text-slate-600">Join the queue for your selected service</p>
-            </div>
-            {selectedService && (
-              <button
-                onClick={() => setShowServiceSelection(true)}
-                className="px-4 py-2 border-2 border-blue-600 text-blue-600 rounded-xl hover:bg-blue-50 transition-all"
-              >
-                Change Service
-              </button>
-            )}
+  // Step 1: Industry Selection
+  if (step === 'industry') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Dashboard</span>
+            </button>
+            <h1 className="text-4xl text-slate-800 mb-2">Choose Your Industry</h1>
+            <p className="text-xl text-slate-600">Select the industry you need service from</p>
           </div>
 
-          {industry && selectedService && (
-            <div className="mt-4 flex items-center gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {industries.map((industry) => {
+              const Icon = industry.icon;
+              return (
+                <button
+                  key={industry.id}
+                  onClick={() => handleIndustrySelect(industry)}
+                  className="bg-white p-8 rounded-2xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all text-left"
+                >
+                  <div className={`bg-gradient-to-r ${industry.color} rounded-lg p-4 w-16 h-16 flex items-center justify-center mb-4`}>
+                    <Icon className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-2xl text-slate-800 mb-2">{industry.name}</h3>
+                  <p className="text-slate-600">{industry.description}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2: Service Selection
+  if (step === 'service' && selectedIndustry) {
+    const IndustryIcon = selectedIndustry.icon;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <button
+              onClick={() => setStep('industry')}
+              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Industries</span>
+            </button>
+            <h1 className="text-4xl text-slate-800 mb-2">Select a Service</h1>
+            <p className="text-xl text-slate-600">Choose the service you need</p>
+
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
+              <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-lg p-2`}>
+                <IndustryIcon className="w-4 h-4 text-white" />
+              </div>
+              <span className="text-slate-700">{selectedIndustry.name}</span>
+            </div>
+          </div>
+
+          {loadingServices ? (
+            <div className="text-center py-12">
+              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p className="text-slate-600">Loading services...</p>
+            </div>
+          ) : services.length === 0 ? (
+            <div className="bg-white rounded-3xl shadow-lg p-12 text-center">
+              <Briefcase className="w-16 h-16 text-slate-400 mx-auto mb-4" />
+              <h3 className="text-2xl text-slate-800 mb-2">No Services Available</h3>
+              <p className="text-slate-600 mb-6">There are no services available for this industry at the moment.</p>
+              <button
+                onClick={() => setStep('industry')}
+                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
+              >
+                Choose Different Industry
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {services.map((service) => (
+                <button
+                  key={service.id}
+                  onClick={() => handleServiceSelect(service)}
+                  className="bg-white p-6 rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all text-left"
+                >
+                  <h3 className="text-xl text-slate-800 mb-2">{service.name}</h3>
+                  <p className="text-sm text-slate-600 mb-2">{service.description}</p>
+                  {service.estimated_time && (
+                    <p className="text-xs text-blue-600">Est. time: {service.estimated_time} min</p>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Step 3: Branch Selection
+  if (step === 'branch' && selectedService && selectedIndustry) {
+    const IndustryIcon = selectedIndustry.icon;
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
+        <div className="max-w-7xl mx-auto">
+          <div className="mb-8">
+            <button
+              onClick={() => setStep('service')}
+              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              <span>Back to Services</span>
+            </button>
+
+            <h1 className="text-4xl text-slate-800 mb-2">Select a Branch Location</h1>
+            <p className="text-xl text-slate-600">Choose your preferred branch</p>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                <div className={`bg-gradient-to-r ${industry.color} rounded-lg p-2`}>
-                  {IndustryIcon && <IndustryIcon className="w-4 h-4 text-white" />}
+                <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-lg p-2`}>
+                  <IndustryIcon className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-slate-700">{industry.name}</span>
+                <span className="text-slate-700">{selectedIndustry.name}</span>
               </div>
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-200">
                 <Ticket className="w-4 h-4 text-blue-600" />
                 <span className="text-slate-700">{selectedService.name}</span>
               </div>
             </div>
-          )}
-        </div>
-
-        {/* Branch Selection */}
-        <div>
-          <h2 className="text-3xl text-slate-800 mb-6">Select a Branch Location</h2>
+          </div>
 
           {branches.length === 0 ? (
             <div className="bg-white rounded-3xl shadow-lg p-12 text-center border-2 border-slate-200">
@@ -331,17 +433,17 @@ export function Services() {
               <h3 className="text-2xl text-slate-800 mb-2">No Branches Available</h3>
               <p className="text-slate-600 mb-6">There are no branch locations available for this industry at the moment.</p>
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => setStep('service')}
                 className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
               >
-                Go to Dashboard
+                Choose Different Service
               </button>
             </div>
           ) : (
             <div className="grid md:grid-cols-2 gap-6">
               {branches.map((branch) => {
                 const isSelected = selectedBranch === branch.id;
-                const trafficLevel = Math.floor(Math.random() * 3); // 0: Low, 1: Medium, 2: High
+                const trafficLevel = Math.floor(Math.random() * 3);
                 const trafficColors = ['text-green-600 bg-green-50', 'text-yellow-600 bg-yellow-50', 'text-red-600 bg-red-50'];
                 const trafficLabels = ['Low Traffic', 'Medium Traffic', 'High Traffic'];
                 const customerCount = [3, 12, 25][trafficLevel];
@@ -358,7 +460,7 @@ export function Services() {
                     }`}
                   >
                     <div className="flex items-start gap-4 mb-4">
-                      <div className={`bg-gradient-to-r ${industry?.color || 'from-blue-600 to-blue-700'} rounded-xl p-3 flex-shrink-0`}>
+                      <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-xl p-3 flex-shrink-0`}>
                         <MapPin className="w-6 h-6 text-white" />
                       </div>
                       <div className="flex-1">
@@ -380,7 +482,6 @@ export function Services() {
                       </div>
                     </div>
 
-                    {/* Traffic and Wait Time Info */}
                     <div className="grid grid-cols-3 gap-2 mb-4">
                       <div className={`${trafficColors[trafficLevel]} rounded-lg p-2 text-center`}>
                         <Users className="w-4 h-4 mx-auto mb-1" />
@@ -418,7 +519,6 @@ export function Services() {
             </div>
           )}
 
-          {/* Join Queue Button */}
           {selectedBranch && (
             <div className="mt-8 bg-white rounded-2xl p-6 shadow-xl border border-blue-200">
               <div className="flex items-center justify-between">
@@ -439,16 +539,8 @@ export function Services() {
           )}
         </div>
       </div>
+    );
+  }
 
-      {/* Service Selection Modal */}
-      {showServiceSelection && industry && (
-        <ServiceSelection
-          industryId={industry.id}
-          onSelect={handleServiceSelect}
-          onClose={() => setShowServiceSelection(false)}
-          showClose={true}
-        />
-      )}
-    </div>
-  );
+  return null;
 }

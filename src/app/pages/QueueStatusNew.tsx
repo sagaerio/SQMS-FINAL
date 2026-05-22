@@ -384,14 +384,6 @@ export function QueueStatus() {
                 <p className="text-sm text-slate-600">Manage your queue ticket</p>
               </div>
               <div className="flex gap-4">
-                <button
-                  onClick={loadTickets}
-                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                  Refresh Status
-                </button>
-
                 {activeTicket.status === 'waiting' && (
                   <button
                     onClick={handleCancelTicket}
@@ -402,6 +394,19 @@ export function QueueStatus() {
                     {cancelling ? 'Cancelling...' : 'Cancel Ticket'}
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* Ticket Generation Time */}
+            <div className="mt-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+              <div className="flex items-center gap-3">
+                <Clock className="w-6 h-6 text-blue-600" />
+                <div>
+                  <p className="text-sm text-slate-600">Ticket Generated At</p>
+                  <p className="text-lg text-blue-600 font-bold">
+                    {new Date(activeTicket.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
               </div>
             </div>
 

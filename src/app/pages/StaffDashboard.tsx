@@ -4,6 +4,8 @@ import { useIndustry } from '../contexts/IndustryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import { industryServices } from '../data/industryServices';
+import { useRealtimeQueue } from '../../hooks/useRealtimeQueue';
+import type { QueueTicket } from '../../lib/supabase';
 
 interface CustomerHistory {
   visitDate: string;
@@ -70,6 +72,12 @@ export function StaffDashboard() {
   });
   const [customerViewTab, setCustomerViewTab] = useState<'details' | 'history'>('details');
   const [customerNotes, setCustomerNotes] = useState('');
+
+  // Get staff's industry from localStorage
+  const staffIndustryId = localStorage.getItem('sqms_staff_industry') || localStorage.getItem('sqms_admin_industry') || '';
+
+  // Real-time subscription to queue tickets for this industry
+  const { tickets: realtimeTickets, loading: ticketsLoading } = useRealtimeQueue(staffIndustryId || undefined);
 
   // Check authentication
   useEffect(() => {
@@ -279,6 +287,84 @@ export function StaffDashboard() {
       window.removeEventListener('storage', handleStorageChange);
     };
   }, [industry, assignedCounter]);
+
+  // Process real-time tickets from Supabase and update waiting queue
+  useEffect(() => {
+    if (ticketsLoading || !realtimeTickets) return;
+
+    // Get services this staff handles
+    const storedStaffIndustry = localStorage.getItem('sqms_staff_industry') || '';
+    const industryStaffInfo: { [key: string]: any } = {
+      banking: {
+        handlingServices: ['Account Opening', 'General Banking Inquiry', 'Document Verification']
+      },
+      healthcare: {
+        handlingServices: ['General Consultation', 'Specialist Appointment', 'Lab Tests']
+      },
+      retail: {
+        handlingServices: ['Product Return', 'Customer Service', 'Product Consultation']
+      },
+      government: {
+        handlingServices: ['License Renewal', 'Permit Application', 'General Inquiry']
+      },
+      education: {
+        handlingServices: ['Student Admissions', 'Academic Counseling', 'Registration Support']
+      },
+      corporate: {
+        handlingServices: ['IT Support', 'Meeting Room Booking', 'General Admin Support']
+      }
+    };
+
+    const handlingServices = industryStaffInfo[storedStaffIndustry]?.handlingServices || [];
+
+    // Convert Supabase tickets to QueueItem format
+    const formattedTickets: QueueItem[] = realtimeTickets
+      .filter(ticket => ticket.status === 'waiting' || ticket.status === 'called')
+      .map(ticket => {
+        const joinTime = new Date(ticket.created_at).getTime();
+        const now = Date.now();
+        const mins = Math.floor((now - joinTime) / 60000);
+
+        // Access joined customer and service data
+        const customer = (ticket as any).customer;
+        const service = (ticket as any).service;
+
+        return {
+          id: ticket.id,
+          ticketNumber: ticket.ticket_number,
+          service: service?.name || services.find(s => s.id === ticket.service_id)?.name || 'General Service',
+          customerName: customer?.full_name || 'Customer',
+          waitTime: `${mins} min`,
+          totalWaitMins: mins,
+          status: ticket.status === 'waiting' ? 'waiting' : 'serving',
+          origin: 'Mobile App' as const,
+          joinedAt: ticket.created_at,
+          customerEmail: customer?.email || '',
+          isReturningCustomer: false,
+          previousVisits: 0,
+          history: [],
+          staffNotes: ''
+        };
+      });
+
+    // Filter by services this staff handles if configured
+    const filteredTickets = handlingServices.length > 0
+      ? formattedTickets.filter(item => handlingServices.includes(item.service))
+      : formattedTickets;
+
+    // Update waiting queue with real-time tickets
+    setWaitingQueue(filteredTickets);
+
+    // Check for new tickets and notify
+    const previousIds = waitingQueue.map(item => item.id);
+    const newTickets = filteredTickets.filter(ticket => !previousIds.includes(ticket.id));
+
+    if (newTickets.length > 0) {
+      newTickets.forEach(ticket => {
+        addNotification(`New customer joined: ${ticket.ticketNumber} for ${ticket.service}`);
+      });
+    }
+  }, [realtimeTickets, ticketsLoading, services]);
 
   // Update wait times every minute
   useEffect(() => {

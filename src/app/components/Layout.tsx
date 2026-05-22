@@ -77,10 +77,7 @@ export function Layout() {
     setUserName(name);
     setNavItems(getNavItems(role));
 
-    // Show industry selector on first visit
-    if (!industry) {
-      setShowIndustrySelector(true);
-    }
+    // Don't auto-show industry selector on login for customers
   }, [industry, user]);
 
   const handleLogout = async () => {
@@ -164,18 +161,6 @@ export function Layout() {
                       <User className="w-4 h-4" />
                       <span className="text-sm">My Profile</span>
                     </button>
-                    {industry && userRole === 'customer' && (
-                      <button
-                        onClick={() => {
-                          setProfileMenuOpen(false);
-                          setShowIndustrySelector(true);
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-slate-700 hover:bg-slate-100 transition-all"
-                      >
-                        <Briefcase className="w-4 h-4" />
-                        <span className="text-sm">Change Service</span>
-                      </button>
-                    )}
                     <button
                       onClick={() => {
                         setProfileMenuOpen(false);

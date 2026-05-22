@@ -77,7 +77,12 @@ export function Appointments() {
     const loadServices = async () => {
       const { data } = await getServicesByIndustry(industry.id);
       if (data) {
-        setServices(data);
+        // Deduplicate services by ID and name to ensure each service appears only once
+        // This prevents duplicates across all staff pages regardless of business
+        const uniqueServices = data.filter((service, index, self) =>
+          index === self.findIndex((s) => s.id === service.id || s.name === service.name)
+        );
+        setServices(uniqueServices);
       }
     };
 

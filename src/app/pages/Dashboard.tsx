@@ -38,13 +38,12 @@ export function Dashboard() {
       return;
     }
 
-    // Always show service selection for customers on login
+    // Load saved service if exists (but don't show selection modal on login)
     if (user.role === 'customer') {
       const savedService = localStorage.getItem('sqms_selected_service');
       if (savedService) {
         setSelectedService(JSON.parse(savedService));
       }
-      setShowServiceSelection(true);
     }
   }, [user, loading, navigate]);
 
@@ -188,28 +187,6 @@ export function Dashboard() {
               ? 'Your time is valuable. We help you skip the wait.'
               : 'Smart Queue Management System'}
           </p>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            {industry && (
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                <div className={`bg-gradient-to-r ${industry.color} rounded-lg p-2`}>
-                  {IndustryIcon && <IndustryIcon className="w-4 h-4 text-white" />}
-                </div>
-                <span className="text-slate-700">{industry.name}</span>
-              </div>
-            )}
-            {user?.role === 'customer' && selectedService && (
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                <Briefcase className="w-4 h-4 text-blue-600" />
-                <span className="text-slate-700">{selectedService.name}</span>
-                <button
-                  onClick={() => setShowServiceSelection(true)}
-                  className="ml-2 text-xs text-blue-600 hover:underline"
-                >
-                  Change Service
-                </button>
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Customer Features or Menu Grid */}

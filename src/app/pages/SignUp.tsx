@@ -31,7 +31,21 @@ export function SignUp() {
     setError('');
     setLoading(true);
 
-    // Validation
+    // Name validation - cannot contain digits
+    const digitRegex = /\d/;
+    if (digitRegex.test(formData.firstName)) {
+      setError('First name cannot contain digits');
+      setLoading(false);
+      return;
+    }
+
+    if (digitRegex.test(formData.lastName)) {
+      setError('Last name cannot contain digits');
+      setLoading(false);
+      return;
+    }
+
+    // Password validation
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setLoading(false);
@@ -40,6 +54,12 @@ export function SignUp() {
 
     if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password.length > 20) {
+      setError('Password cannot exceed 20 characters');
       setLoading(false);
       return;
     }
@@ -193,10 +213,13 @@ export function SignUp() {
                     value={formData.password}
                     onChange={handleChange}
                     placeholder="Create a password"
+                    minLength={6}
+                    maxLength={20}
                     className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
                 </div>
+                <p className="text-xs text-slate-500 mt-1">6-20 characters</p>
               </div>
 
               {/* Confirm Password */}
@@ -210,6 +233,8 @@ export function SignUp() {
                     value={formData.confirmPassword}
                     onChange={handleChange}
                     placeholder="Re-enter your password"
+                    minLength={6}
+                    maxLength={20}
                     className="w-full pl-12 pr-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     required
                   />
