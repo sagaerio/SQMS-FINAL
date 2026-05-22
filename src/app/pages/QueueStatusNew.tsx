@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download, User, Mail, Briefcase, Users } from 'lucide-react';
+import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download, User, Mail, Briefcase, Users, MapPin } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
 import { useIndustry } from '../contexts/IndustryContext';
@@ -323,7 +323,7 @@ export function QueueStatus() {
         {activeTicket && (
           <div className="bg-white rounded-3xl shadow-lg p-8 mb-6 border border-slate-200">
             <h2 className="text-2xl text-slate-800 mb-6">Your Information</h2>
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
               {/* Customer Details */}
               <div className="bg-blue-50 rounded-xl p-5">
                 <div className="flex items-center gap-3 mb-3">
@@ -355,6 +355,19 @@ export function QueueStatus() {
                   <span className="text-sm text-slate-600">Selected Service</span>
                 </div>
                 <p className="text-lg text-slate-800 font-semibold">{getServiceName()}</p>
+              </div>
+
+              {/* Branch Location */}
+              <div className="bg-orange-50 rounded-xl p-5">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="bg-orange-600 rounded-lg p-2">
+                    <MapPin className="w-5 h-5 text-white" />
+                  </div>
+                  <span className="text-sm text-slate-600">Branch Location</span>
+                </div>
+                <p className="text-lg text-slate-800 font-semibold">
+                  {(activeTicket as any).branch?.name || 'Main Branch'}
+                </p>
               </div>
             </div>
 

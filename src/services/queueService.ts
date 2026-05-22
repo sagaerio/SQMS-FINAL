@@ -7,7 +7,8 @@ import { supabase, QueueTicket, Appointment, Service, Counter, Industry } from '
 export const createQueueTicket = async (
   customerId: string,
   industryId: string,
-  serviceId: string
+  serviceId: string,
+  branchId?: string
 ) => {
   try {
     // Get current queue position
@@ -34,6 +35,7 @@ export const createQueueTicket = async (
         customer_id: customerId,
         industry_id: industryId,
         service_id: serviceId,
+        branch_id: branchId,
         position,
         estimated_wait_time: estimatedWaitTime,
         status: 'waiting',
@@ -56,6 +58,7 @@ export const getCustomerTickets = async (customerId: string) => {
         *,
         industry:industries(*),
         service:services(*),
+        branch:businesses(*),
         counter:counters(*)
       `)
       .eq('customer_id', customerId)
@@ -76,6 +79,7 @@ export const getActiveTicket = async (customerId: string) => {
         *,
         industry:industries(*),
         service:services(*),
+        branch:businesses(*),
         counter:counters(*)
       `)
       .eq('customer_id', customerId)
@@ -161,6 +165,7 @@ export const createAppointment = async (
   serviceId: string,
   appointmentDate: string,
   appointmentTime: string,
+  branchId?: string,
   notes?: string
 ) => {
   try {
@@ -170,6 +175,7 @@ export const createAppointment = async (
         customer_id: customerId,
         industry_id: industryId,
         service_id: serviceId,
+        branch_id: branchId,
         appointment_date: appointmentDate,
         appointment_time: appointmentTime,
         notes,

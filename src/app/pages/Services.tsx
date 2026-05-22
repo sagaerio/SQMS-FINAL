@@ -19,10 +19,9 @@ import { useIndustry } from '../contexts/IndustryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { servicesByIndustry } from '../components/ServiceSelection';
 import type { Service } from '../components/ServiceSelection';
-import { branches as allBranches } from '../data/businessTypes';
 import { QRCodeSVG } from 'qrcode.react';
-import { createQueueTicket, getActiveTicket, getServicesByIndustry } from '../../services/queueService';
-import type { QueueTicket } from '../../lib/supabase';
+import { createQueueTicket, getActiveTicket, getServicesByIndustry, getBusinessesByIndustry } from '../../services/queueService';
+import type { QueueTicket, Business } from '../../lib/supabase';
 import { industries } from '../components/IndustrySelector';
 import type { Industry } from '../components/IndustrySelector';
 
@@ -35,7 +34,9 @@ export function Services() {
   const [hasActiveTicket, setHasActiveTicket] = useState(false);
   const [loading, setLoading] = useState(false);
   const [services, setServices] = useState<Service[]>([]);
+  const [branches, setBranches] = useState<Business[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
+  const [loadingBranches, setLoadingBranches] = useState(false);
   const { setIndustry } = useIndustry();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
@@ -100,6 +101,30 @@ export function Services() {
     loadServices();
   }, [selectedIndustry]);
 
+  // Load branches when industry is selected
+  useEffect(() => {
+    if (!selectedIndustry) return;
+
+    const loadBranches = async () => {
+      setLoadingBranches(true);
+      try {
+        const { data } = await getBusinessesByIndustry(selectedIndustry.id);
+        if (data && data.length > 0) {
+          setBranches(data);
+        } else {
+          console.warn('No branches found for industry:', selectedIndustry.id);
+          setBranches([]);
+        }
+      } catch (err) {
+        console.warn('Failed to load branches:', err);
+        setBranches([]);
+      }
+      setLoadingBranches(false);
+    };
+
+    loadBranches();
+  }, [selectedIndustry]);
+
   const handleIndustrySelect = (industry: Industry) => {
     setSelectedIndustry(industry);
     setIndustry(industry); // Save to context
@@ -148,6 +173,7 @@ export function Services() {
         customer_id: user.id,
         industry_id: selectedIndustry.id,
         service_id: selectedService.id,
+        branch_id: selectedBranch,
         status: 'waiting',
         position: Math.floor(Math.random() * 8) + 3,
         estimated_wait_time: Math.floor(Math.random() * 30) + 15,
@@ -193,7 +219,8 @@ export function Services() {
         const { data, error } = await createQueueTicket(
           user.id,
           selectedIndustry.id,
-          serviceId
+          serviceId,
+          selectedBranch
         );
 
         if (error || !data) {
@@ -219,8 +246,6 @@ export function Services() {
       setLoading(false);
     }
   };
-
-  const branches = selectedIndustry ? allBranches.filter(b => b.businessType === selectedIndustry.id) : [];
 
   // Show queue confirmation
   if (step === 'confirmation' && queueTicket) {
@@ -258,7 +283,7 @@ export function Services() {
               <div className="space-y-2 text-sm text-slate-600">
                 <p><strong>Industry:</strong> {selectedIndustry?.name}</p>
                 <p><strong>Service:</strong> {selectedService?.name}</p>
-                <p><strong>Branch:</strong> {allBranches.find(b => b.id === selectedBranch)?.name}</p>
+                <p><strong>Branch:</strong> {branches.find(b => b.id === selectedBranch)?.name}</p>
                 <p><strong>Position:</strong> <span className="text-blue-600 font-semibold">#{queueTicket.position}</span></p>
                 <p><strong>Estimated Wait:</strong> <span className="text-orange-600">{queueTicket.estimated_wait_time} min</span></p>
                 <p><strong>Status:</strong> <span className="text-green-600 capitalize">{queueTicket.status}</span></p>

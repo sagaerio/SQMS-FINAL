@@ -57,6 +57,7 @@ export interface QueueTicket {
   customer_id: string;
   industry_id: string;
   service_id: string;
+  branch_id?: string;
   counter_id?: string;
   status: 'waiting' | 'called' | 'serving' | 'completed' | 'cancelled' | 'no_show';
   position: number;
@@ -72,6 +73,7 @@ export interface Appointment {
   customer_id: string;
   industry_id: string;
   service_id: string;
+  branch_id?: string;
   counter_id?: string;
   staff_id?: string;
   appointment_date: string;
