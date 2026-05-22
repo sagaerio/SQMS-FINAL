@@ -29,9 +29,16 @@ export const createQueueTicket = async (
 
     const estimatedWaitTime = position * (service?.estimated_time || 15);
 
+    // Generate ticket number (e.g., A001, A002, B001, etc.)
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const letterIndex = Math.floor(position / 1000) % letters.length;
+    const numberPart = String((position % 1000) + 1).padStart(3, '0');
+    const ticketNumber = letters[letterIndex] + numberPart;
+
     const { data, error } = await supabase
       .from('queue_tickets')
       .insert({
+        ticket_number: ticketNumber,
         customer_id: customerId,
         industry_id: industryId,
         service_id: serviceId,
@@ -40,7 +47,13 @@ export const createQueueTicket = async (
         estimated_wait_time: estimatedWaitTime,
         status: 'waiting',
       })
-      .select()
+      .select(`
+        *,
+        industry:industries(*),
+        service:services(*),
+        branch:businesses(*),
+        counter:counters(*)
+      `)
       .single();
 
     if (error) throw error;
@@ -247,6 +260,20 @@ export const getServicesByIndustry = async (industryId: string) => {
       .order('name', { ascending: true });
 
     if (error) throw error;
+
+    // Remove duplicates by keeping only the first occurrence of each unique service name
+    if (data) {
+      const seen = new Set<string>();
+      const uniqueData = data.filter(service => {
+        if (seen.has(service.name)) {
+          return false;
+        }
+        seen.add(service.name);
+        return true;
+      });
+      return { data: uniqueData, error: null };
+    }
+
     return { data, error: null };
   } catch (error) {
     return { data: null, error: error as Error };

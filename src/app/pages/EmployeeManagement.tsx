@@ -130,7 +130,11 @@ export function EmployeeManagement() {
     try {
       const { data: industryBusinesses } = await getBusinessesByIndustry(industryId);
       const { data: industryServices } = await getServicesByIndustry(industryId);
+
+      // Branches are already deduplicated by Supabase query
       if (industryBusinesses) setBranches(industryBusinesses);
+
+      // Services are already deduplicated by getServicesByIndustry
       if (industryServices) setServices(industryServices);
     } catch (error) {
       console.error('Error loading industry data:', error);
@@ -162,6 +166,15 @@ export function EmployeeManagement() {
 
   const handleSaveBranchAssignment = async () => {
     if (!managingStaffId || !selectedBranchId) return;
+
+    // Validate that the selected branch belongs to the staff's industry
+    const staff = employees.find(e => e.id === managingStaffId);
+    const selectedBranch = branches.find(b => b.id === selectedBranchId);
+
+    if (staff && selectedBranch && staff.industry_id !== selectedBranch.industry_id) {
+      alert(`Cannot assign this branch. Staff industry (${staff.industry_id}) must match branch industry (${selectedBranch.industry_id}).`);
+      return;
+    }
 
     try {
       await assignStaffToBranch(managingStaffId, selectedBranchId);
@@ -403,18 +416,26 @@ export function EmployeeManagement() {
                 <p className="text-sm text-slate-600 mb-3">
                   Select which branch location this staff member will work at:
                 </p>
-                <select
-                  value={selectedBranchId}
-                  onChange={(e) => setSelectedBranchId(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
-                >
-                  <option value="">Select a branch...</option>
-                  {branches.map(branch => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name} - {branch.address}
-                    </option>
-                  ))}
-                </select>
+                {branches.length === 0 ? (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-3">
+                    <p className="text-sm text-yellow-800">
+                      No branches available for this staff member's industry. Please create a branch first or verify the staff member's industry assignment.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedBranchId}
+                    onChange={(e) => setSelectedBranchId(e.target.value)}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 mb-3"
+                  >
+                    <option value="">Select a branch...</option>
+                    {branches.map(branch => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name} - {branch.address}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <button
                   onClick={handleSaveBranchAssignment}
                   disabled={!selectedBranchId}

@@ -80,22 +80,13 @@ export function Services() {
       try {
         const { data } = await getServicesByIndustry(selectedIndustry.id);
         if (data && data.length > 0) {
-          // Remove duplicates by creating a Map keyed by service name
-          const uniqueServicesMap = new Map();
-
-          data.forEach(service => {
-            // Use service name as key to ensure uniqueness
-            if (!uniqueServicesMap.has(service.name)) {
-              uniqueServicesMap.set(service.name, {
-                id: service.id,
-                name: service.name,
-                description: service.description || '',
-                estimated_time: service.estimated_time
-              });
-            }
-          });
-
-          const mappedServices: Service[] = Array.from(uniqueServicesMap.values());
+          // Map to component format (deduplication already handled at query level)
+          const mappedServices: Service[] = data.map(service => ({
+            id: service.id,
+            name: service.name,
+            description: service.description || '',
+            estimated_time: service.estimated_time
+          }));
           setServices(mappedServices);
         } else {
           // Use fallback mock data only if no Supabase data
