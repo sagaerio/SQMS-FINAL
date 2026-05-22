@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, Play, CheckCircle, User, Clock, Hash, AlertTriangle, Building2, Briefcase, Calendar, Plus, X, UserX, RefreshCw, ArrowRightLeft, QrCode, Smartphone, Globe, MessageSquare, Send, UserPlus, Coffee, History, FileText } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
 import { industryServices } from '../data/industryServices';
 import { useRealtimeQueue } from '../../hooks/useRealtimeQueue';
+import { updateTicketStatus } from '../../services/queueService';
 import type { QueueTicket } from '../../lib/supabase';
 
 interface CustomerHistory {
@@ -72,6 +73,9 @@ export function StaffDashboard() {
   });
   const [customerViewTab, setCustomerViewTab] = useState<'details' | 'history'>('details');
   const [customerNotes, setCustomerNotes] = useState('');
+
+  // Track previous ticket IDs to detect new tickets
+  const previousTicketIds = useRef<string[]>([]);
 
   // Get staff's industry from localStorage
   const staffIndustryId = localStorage.getItem('sqms_staff_industry') || localStorage.getItem('sqms_admin_industry') || '';
@@ -292,7 +296,7 @@ export function StaffDashboard() {
   useEffect(() => {
     if (ticketsLoading || !realtimeTickets) return;
 
-    // Get services this staff handles
+    // Get services this staff handles (from user's assigned services in Supabase)
     const storedStaffIndustry = localStorage.getItem('sqms_staff_industry') || '';
     const industryStaffInfo: { [key: string]: any } = {
       banking: {
@@ -356,14 +360,17 @@ export function StaffDashboard() {
     setWaitingQueue(filteredTickets);
 
     // Check for new tickets and notify
-    const previousIds = waitingQueue.map(item => item.id);
-    const newTickets = filteredTickets.filter(ticket => !previousIds.includes(ticket.id));
+    const currentIds = filteredTickets.map(item => item.id);
+    const newTickets = filteredTickets.filter(ticket => !previousTicketIds.current.includes(ticket.id));
 
     if (newTickets.length > 0) {
       newTickets.forEach(ticket => {
         addNotification(`New customer joined: ${ticket.ticketNumber} for ${ticket.service}`);
       });
     }
+
+    // Update previous IDs
+    previousTicketIds.current = currentIds;
   }, [realtimeTickets, ticketsLoading, services]);
 
   // Update wait times every minute
@@ -382,20 +389,21 @@ export function StaffDashboard() {
         })
       );
 
-      if (currentlyServing) {
-        const joinTime = new Date(currentlyServing.joinedAt).getTime();
+      setCurrentlyServing(prev => {
+        if (!prev) return null;
+        const joinTime = new Date(prev.joinedAt).getTime();
         const now = Date.now();
         const mins = Math.floor((now - joinTime) / 60000);
-        setCurrentlyServing({
-          ...currentlyServing,
+        return {
+          ...prev,
           totalWaitMins: mins,
           waitTime: `${mins} min`
-        });
-      }
+        };
+      });
     }, 60000);
 
     return () => clearInterval(interval);
-  }, [currentlyServing]);
+  }, []); // Empty array - we use functional updates
 
   const addNotification = (message: string) => {
     setNotifications(prev => [message, ...prev].slice(0, 5));
@@ -463,7 +471,7 @@ export function StaffDashboard() {
     }
   };
 
-  const handleCallNext = () => {
+  const handleCallNext = async () => {
     if (!isAvailable) {
       alert('You are currently on break. Please set status to Available first.');
       return;
@@ -483,13 +491,31 @@ export function StaffDashboard() {
       return;
     }
 
+    // Update ticket status to 'called' in Supabase
+    const { error } = await updateTicketStatus(nextCustomer.id, 'called', String(assignedCounter));
+
+    if (error) {
+      console.error('Error calling customer:', error);
+      alert('Failed to call customer. Please try again.');
+      return;
+    }
+
     setCurrentlyServing(nextCustomer);
     setWaitingQueue(waitingQueue.slice(1));
     addNotification(`Now calling ${nextCustomer.ticketNumber} - ${nextCustomer.customerName} for ${nextCustomer.service}`);
   };
 
-  const handleCompleteService = () => {
+  const handleCompleteService = async () => {
     if (!currentlyServing) return;
+
+    // Update ticket status to 'completed' in Supabase
+    const { error } = await updateTicketStatus(currentlyServing.id, 'completed');
+
+    if (error) {
+      console.error('Error completing service:', error);
+      alert('Failed to mark service as completed. Please try again.');
+      return;
+    }
 
     const newCompleted = completedToday + 1;
     setCompletedToday(newCompleted);

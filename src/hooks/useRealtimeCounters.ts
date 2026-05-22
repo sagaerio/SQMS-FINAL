@@ -43,8 +43,6 @@ export function useRealtimeCounters(industryId?: string) {
               filter: industryId ? `industry_id=eq.${industryId}` : undefined,
             },
             (payload) => {
-              console.log('Counter update:', payload);
-
               if (payload.eventType === 'INSERT') {
                 setCounters((current) => [...current, payload.new as Counter]);
               } else if (payload.eventType === 'UPDATE') {

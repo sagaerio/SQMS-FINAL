@@ -60,8 +60,6 @@ export function useRealtimeSubscription<T = any>(
               filter: filter,
             },
             (payload) => {
-              console.log(`Real-time ${payload.eventType} on ${table}:`, payload);
-
               if (payload.eventType === 'INSERT') {
                 setData((current) => [...current, payload.new as T]);
               } else if (payload.eventType === 'UPDATE') {

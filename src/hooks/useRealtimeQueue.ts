@@ -15,13 +15,14 @@ export function useRealtimeQueue(industryId?: string) {
 
     const setupQueue = async () => {
       try {
-        // Initial fetch with customer and service data
+        // Initial fetch with customer, service, and counter data
         let query = supabase
           .from('queue_tickets')
           .select(`
             *,
             customer:users!queue_tickets_customer_id_fkey(full_name, email),
-            service:services!queue_tickets_service_id_fkey(name, description, estimated_time)
+            service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
+            counter:counters(number, name)
           `)
           .order('position', { ascending: true });
 
@@ -47,16 +48,15 @@ export function useRealtimeQueue(industryId?: string) {
               filter: industryId ? `industry_id=eq.${industryId}` : undefined,
             },
             async (payload) => {
-              console.log('Queue update:', payload);
-
               if (payload.eventType === 'INSERT') {
-                // Fetch the new ticket with customer and service data
+                // Fetch the new ticket with customer, service, and counter data
                 const { data: newTicket } = await supabase
                   .from('queue_tickets')
                   .select(`
                     *,
                     customer:users!queue_tickets_customer_id_fkey(full_name, email),
-                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time)
+                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
+                    counter:counters(number, name)
                   `)
                   .eq('id', (payload.new as any).id)
                   .single();
@@ -65,13 +65,14 @@ export function useRealtimeQueue(industryId?: string) {
                   setTickets((current) => [...current, newTicket as any]);
                 }
               } else if (payload.eventType === 'UPDATE') {
-                // Fetch the updated ticket with customer and service data
+                // Fetch the updated ticket with customer, service, and counter data
                 const { data: updatedTicket } = await supabase
                   .from('queue_tickets')
                   .select(`
                     *,
                     customer:users!queue_tickets_customer_id_fkey(full_name, email),
-                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time)
+                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
+                    counter:counters(number, name)
                   `)
                   .eq('id', (payload.new as any).id)
                   .single();
@@ -152,7 +153,6 @@ export function useRealtimeTicket(ticketId: string | null) {
               filter: `id=eq.${ticketId}`,
             },
             (payload) => {
-              console.log('Ticket updated:', payload.new);
               setTicket(payload.new as QueueTicket);
             }
           )

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, Clock, CheckCircle, XCircle, Hash, RefreshCw, Download, User, Mail, Briefcase, Users, MapPin } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +12,14 @@ import {
 } from '../../services/queueService';
 import type { QueueTicket } from '../../lib/supabase';
 import { useNavigate } from 'react-router';
+import { safeGetItem, safeSetItem } from '../../lib/storage';
+
+interface NotificationItem {
+  message: string;
+  timestamp: string;
+  type: 'called' | 'serving' | 'completed' | 'transferred';
+  read: boolean;
+}
 
 export function QueueStatus() {
   const navigate = useNavigate();
@@ -22,6 +30,36 @@ export function QueueStatus() {
   const [allTickets, setAllTickets] = useState<QueueTicket[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelling, setCancelling] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+
+  // Load notification history from localStorage
+  useEffect(() => {
+    if (!user) return;
+    const saved = safeGetItem<NotificationItem[]>(`sqms_notifications_${user.id}`, []);
+    setNotifications(saved);
+  }, [user]);
+
+  // Save notification to history (useCallback to avoid recreating function)
+  const saveNotificationToHistory = React.useCallback((notification: NotificationItem) => {
+    if (!user) return;
+    setNotifications(prev => {
+      const updated = [notification, ...prev].slice(0, 50); // Keep last 50
+      safeSetItem(`sqms_notifications_${user.id}`, updated);
+      return updated;
+    });
+  }, [user]);
+
+  // Mark all notifications as read
+  const markAllAsRead = () => {
+    if (!user) return;
+    const updated = notifications.map(n => ({ ...n, read: true }));
+    setNotifications(updated);
+    safeSetItem(`sqms_notifications_${user.id}`, updated);
+  };
+
+  // Get unread count
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   // Immediate redirect for staff/admin - check on every render (unless in customer mode)
   useEffect(() => {
@@ -72,13 +110,44 @@ export function QueueStatus() {
 
     const subscription = subscribeToTicketUpdates(activeTicket.id, (payload) => {
       if (payload.eventType === 'UPDATE') {
-        setActiveTicket(payload.new as QueueTicket);
+        const oldStatus = (activeTicket as any)?.status;
+        const newTicket = payload.new as QueueTicket;
+        setActiveTicket(newTicket);
 
         // Show in-app notification for status changes
-        if (payload.new.status === 'called') {
-          showNotification('🎉 Your turn is up! Please proceed to your assigned counter.', 'success');
-        } else if (payload.new.status === 'serving') {
+        if (newTicket.status === 'called' && oldStatus !== 'called') {
+          const counterInfo = (newTicket as any).counter?.number
+            ? ` at Counter ${(newTicket as any).counter.number}`
+            : '';
+          showNotification(`🎉 Your turn is up! Please proceed${counterInfo}.`, 'success', 10000);
+
+          // Save notification to history
+          saveNotificationToHistory({
+            message: `You were called${counterInfo}`,
+            timestamp: new Date().toISOString(),
+            type: 'called',
+            read: false
+          });
+        } else if (newTicket.status === 'serving' && oldStatus !== 'serving') {
           showNotification('✅ You are now being served.', 'success');
+
+          // Save notification to history
+          saveNotificationToHistory({
+            message: 'You are now being served',
+            timestamp: new Date().toISOString(),
+            type: 'serving',
+            read: false
+          });
+        } else if (newTicket.status === 'completed' && oldStatus !== 'completed') {
+          showNotification('✨ Service completed. Thank you!', 'success');
+
+          // Save notification to history
+          saveNotificationToHistory({
+            message: 'Your service has been completed',
+            timestamp: new Date().toISOString(),
+            type: 'completed',
+            read: false
+          });
         }
       }
     });
@@ -86,7 +155,7 @@ export function QueueStatus() {
     return () => {
       subscription.unsubscribe();
     };
-  }, [activeTicket?.id]);
+  }, [activeTicket?.id, saveNotificationToHistory, showNotification]);
 
   const loadTickets = async () => {
     if (!user) return;
@@ -276,8 +345,74 @@ export function QueueStatus() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
       <div className="max-w-5xl mx-auto">
-        <h1 className="text-4xl text-slate-800 mb-3">Queue Status</h1>
-        <p className="text-xl text-slate-600 mb-8">Monitor your position in real-time</p>
+        <div className="flex items-start justify-between mb-8">
+          <div>
+            <h1 className="text-4xl text-slate-800 mb-3">Queue Status</h1>
+            <p className="text-xl text-slate-600">Monitor your position in real-time</p>
+          </div>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            className="relative p-3 bg-white rounded-xl shadow-md hover:shadow-lg transition-all border border-slate-200"
+          >
+            <Bell className="w-6 h-6 text-slate-700" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                {unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Notification Panel */}
+        {showNotifications && (
+          <div className="bg-white rounded-2xl shadow-2xl p-6 mb-6 border border-slate-200">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-2xl text-slate-800">Notifications</h2>
+              {unreadCount > 0 && (
+                <button
+                  onClick={markAllAsRead}
+                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                >
+                  Mark all as read
+                </button>
+              )}
+            </div>
+
+            {notifications.length === 0 ? (
+              <div className="text-center py-8">
+                <Bell className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500">No notifications yet</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {notifications.map((notification, index) => (
+                  <div
+                    key={index}
+                    className={`p-4 rounded-xl border-2 transition-all ${
+                      notification.read
+                        ? 'bg-slate-50 border-slate-200'
+                        : 'bg-blue-50 border-blue-200 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <p className={`text-sm ${notification.read ? 'text-slate-700' : 'text-slate-900 font-medium'}`}>
+                          {notification.message}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {new Date(notification.timestamp).toLocaleString()}
+                        </p>
+                      </div>
+                      {!notification.read && (
+                        <div className="w-2 h-2 bg-blue-600 rounded-full flex-shrink-0 mt-1"></div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Ticket Number at Top */}
         {activeTicket && (
@@ -295,6 +430,15 @@ export function QueueStatus() {
               </div>
             </div>
             <p className="text-white text-7xl font-bold mb-2">{activeTicket.ticket_number}</p>
+
+            {/* Show counter info when called or serving */}
+            {(activeTicket.status === 'called' || activeTicket.status === 'serving') && (activeTicket as any).counter && (
+              <div className="bg-yellow-400 text-yellow-900 rounded-2xl px-8 py-4 mb-4 inline-block animate-pulse">
+                <p className="text-sm font-semibold mb-1">Please proceed to</p>
+                <p className="text-3xl font-bold">Counter {(activeTicket as any).counter.number}</p>
+              </div>
+            )}
+
             <div className="flex items-center justify-center gap-6 mt-4">
               <div className="bg-white/20 rounded-lg px-6 py-3">
                 <p className="text-white text-sm opacity-90">Position</p>

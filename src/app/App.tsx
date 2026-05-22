@@ -5,6 +5,7 @@ import { IndustryProvider } from './contexts/IndustryContext';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { PwaInstallPrompt } from './components/PwaInstallPrompt';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { useEffect } from 'react';
 
 export default function App() {
@@ -14,11 +15,11 @@ export default function App() {
       window.addEventListener('load', () => {
         // vite-plugin-pwa generates sw.js in the root of the build
         navigator.serviceWorker.register('/sw.js', { scope: '/' })
-          .then(registration => {
-            console.log('SW registered: ', registration);
+          .then(() => {
+            // Service worker registered successfully
           })
-          .catch(registrationError => {
-            console.log('SW registration failed: ', registrationError);
+          .catch(() => {
+            // Service worker registration failed
           });
       });
     }
@@ -51,14 +52,16 @@ export default function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <IndustryProvider>
-        <NotificationProvider>
-          <NotificationSystem />
-          <RouterProvider router={router} />
-          <PwaInstallPrompt />
-        </NotificationProvider>
-      </IndustryProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <IndustryProvider>
+          <NotificationProvider>
+            <NotificationSystem />
+            <RouterProvider router={router} />
+            <PwaInstallPrompt />
+          </NotificationProvider>
+        </IndustryProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
