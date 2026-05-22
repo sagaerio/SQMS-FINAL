@@ -165,4 +165,99 @@ ORDER BY enumsortorder;
 
 ---
 
+## 5. ✅ Demo Admin and Superadmin Accounts
+
+**What Was Created:**
+- Complete documentation of all demo accounts
+- SQL script to create real accounts in Supabase
+- Easy reference guide with all credentials
+
+**Files Created:**
+- `DEMO_ACCOUNTS_LIST.md` - Complete list of all demo accounts
+- `CREATE_DEMO_ADMIN_ACCOUNTS.sql` - SQL to create accounts in Supabase
+
+### Demo Accounts Available
+
+**Superadmin Account (Full System Access):**
+- Email: `superadmin@sqms.com`
+- Password: `super123`
+- Access: All industries, all features
+
+**Admin Accounts (One per Industry):**
+- Banking: `admin.banking@sqms.com` / `admin123`
+- Healthcare: `admin.healthcare@sqms.com` / `admin123`
+- Retail: `admin.retail@sqms.com` / `admin123`
+- Government: `admin.government@sqms.com` / `admin123`
+- Education: `admin.education@sqms.com` / `admin123`
+- Corporate: `admin.corporate@sqms.com` / `admin123`
+
+**Staff Accounts (One per Industry):**
+- Banking: `staff.banking@sqms.com` / `banking123`
+- Healthcare: `staff.healthcare@sqms.com` / `healthcare123`
+- Retail: `staff.retail@sqms.com` / `retail123`
+- Government: `staff.government@sqms.com` / `government123`
+- Education: `staff.education@sqms.com` / `education123`
+- Corporate: `staff.corporate@sqms.com` / `corporate123`
+
+### How to Use Demo Accounts
+
+**Option 1: Demo Mode (No Supabase Setup)**
+These accounts work immediately without any setup:
+1. Go to `/staff-portal`
+2. Enter any email/password from above
+3. Click "Login"
+4. ✅ You're in!
+
+**Option 2: Real Supabase Accounts**
+To create real accounts in your Supabase database:
+
+1. **Create auth users in Supabase Dashboard:**
+   - Go to Authentication → Users → Add User
+   - Use emails/passwords from above
+   - Enable "Auto Confirm User" ✅
+
+2. **Create user profiles:**
+   - Open `CREATE_DEMO_ADMIN_ACCOUNTS.sql`
+   - Follow the step-by-step instructions
+   - Copy UUIDs from auth users
+   - Run the INSERT statements
+
+3. **Login:**
+   - Go to `/staff-portal`
+   - Use the credentials
+   - ✅ Full Supabase integration!
+
+### Quick Test
+
+**Test Superadmin:**
+```
+Email: superadmin@sqms.com
+Password: super123
+Login URL: /staff-portal
+Expected: Access to all industries and system management
+```
+
+**Test Industry Admin:**
+```
+Email: admin.banking@sqms.com
+Password: admin123
+Login URL: /staff-portal
+Expected: Access to banking admin panel, employees, services
+```
+
+**Test Staff:**
+```
+Email: staff.banking@sqms.com
+Password: banking123
+Login URL: /staff-portal
+Expected: Access to counter queue and customer service
+```
+
+---
+
 All changes are complete and ready to test! 🎉
+
+**Quick Links:**
+- 📋 Full account list: `DEMO_ACCOUNTS_LIST.md`
+- 🔧 Create accounts in Supabase: `CREATE_DEMO_ADMIN_ACCOUNTS.sql`
+- 🔑 Fix admin role dropdown: `FIX_USER_ROLE_ENUM.sql`

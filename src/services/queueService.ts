@@ -396,3 +396,158 @@ export const subscribeToTicketUpdates = (
 
   return subscription;
 };
+
+// =====================================================
+// BUSINESSES / BRANCHES
+// =====================================================
+
+export const getBusinessesByIndustry = async (industryId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .eq('industry_id', industryId)
+      .eq('status', 'active')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+};
+
+export const getAllBusinesses = async () => {
+  try {
+    const { data, error} = await supabase
+      .from('businesses')
+      .select('*, industry:industries(name, icon, color)')
+      .eq('status', 'active')
+      .order('name', { ascending: true});
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+};
+
+// =====================================================
+// STAFF SERVICES (Staff Service Assignments)
+// =====================================================
+
+export const getStaffServices = async (staffId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('staff_services')
+      .select(`
+        id,
+        service_id,
+        service:services(id, name, description, estimated_time, industry_id)
+      `)
+      .eq('staff_id', staffId);
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+};
+
+export const assignServiceToStaff = async (staffId: string, serviceId: string) => {
+  try {
+    const { error } = await supabase
+      .from('staff_services')
+      .insert({ staff_id: staffId, service_id: serviceId });
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    return { error: error as Error };
+  }
+};
+
+export const removeServiceFromStaff = async (staffId: string, serviceId: string) => {
+  try {
+    const { error } = await supabase
+      .from('staff_services')
+      .delete()
+      .eq('staff_id', staffId)
+      .eq('service_id', serviceId);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    return { error: error as Error };
+  }
+};
+
+// =====================================================
+// USER MANAGEMENT (For Admin/Superadmin)
+// =====================================================
+
+export const getUsersByIndustry = async (industryId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        branch:businesses(id, name, address)
+      `)
+      .eq('industry_id', industryId)
+      .in('role', ['staff', 'admin'])
+      .order('full_name', { ascending: true });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+};
+
+export const getAllUsers = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        *,
+        branch:businesses(id, name, address),
+        industry:industries(name)
+      `)
+      .in('role', ['staff', 'admin'])
+      .order('full_name', { ascending: true });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (error) {
+    return { data: null, error: error as Error };
+  }
+};
+
+export const assignStaffToBranch = async (staffId: string, branchId: string) => {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ branch_id: branchId })
+      .eq('id', staffId);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    return { error: error as Error };
+  }
+};
+
+export const updateUserRole = async (userId: string, role: 'customer' | 'staff' | 'admin' | 'superadmin') => {
+  try {
+    const { error } = await supabase
+      .from('users')
+      .update({ role })
+      .eq('id', userId);
+
+    if (error) throw error;
+    return { error: null };
+  } catch (error) {
+    return { error: error as Error };
+  }
+};

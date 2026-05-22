@@ -14,6 +14,7 @@ export interface User {
   industry_id?: string;
   counter_id?: string;
   business_id?: string;
+  branch_id?: string;  // New: Staff's assigned branch
   created_at: string;
   updated_at: string;
 }
@@ -87,9 +88,16 @@ export interface Business {
   industry_id: string;
   address: string;
   phone: string;
-  email: string;
-  status: 'pending' | 'approved' | 'rejected';
-  admin_id?: string;
+  email?: string;
+  hours: string;
+  status: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface StaffService {
+  id: string;
+  staff_id: string;
+  service_id: string;
+  created_at: string;
 }
