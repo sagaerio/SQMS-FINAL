@@ -128,27 +128,9 @@ export const branches: Branch[] = [
   { id: 'corporate-2', name: 'TechCorp - IT Help Desk', address: '500 Corporate Plaza, Floor 2, New York, NY 10017', phone: '+1 (212) 555-6100', hours: '8:00 AM - 8:00 PM', businessType: 'corporate' },
   { id: 'corporate-3', name: 'TechCorp - Brooklyn Office', address: '100 Business Park, Brooklyn, NY 11201', phone: '+1 (718) 555-6200', hours: '9:00 AM - 6:00 PM', businessType: 'corporate' },
 
-  // Legacy branches (for backward compatibility)
-  { id: 'bank-1', name: 'First National Bank - Downtown', address: '123 Financial District, Manhattan, NY 10005', phone: '+1 (212) 555-0100', hours: '9:00 AM - 6:00 PM', businessType: 'bank' },
-  { id: 'bank-2', name: 'First National Bank - Midtown', address: '456 Park Avenue, New York, NY 10022', phone: '+1 (212) 555-0200', hours: '9:00 AM - 6:00 PM', businessType: 'bank' },
-  { id: 'bank-3', name: 'First National Bank - Brooklyn', address: '789 Atlantic Avenue, Brooklyn, NY 11217', phone: '+1 (718) 555-0300', hours: '9:00 AM - 5:00 PM', businessType: 'bank' },
-  { id: 'bank-4', name: 'First National Bank - Queens', address: '321 Main Street, Flushing, NY 11354', phone: '+1 (718) 555-0400', hours: '9:00 AM - 5:00 PM', businessType: 'bank' },
-
-  // Hospital Branches
-  { id: 'hospital-1', name: 'City General Hospital - Main Campus', address: '100 Medical Plaza, New York, NY 10016', phone: '+1 (212) 555-1000', hours: '24/7 Emergency', businessType: 'hospital' },
-  { id: 'hospital-2', name: 'City General Hospital - North Clinic', address: '250 Health Avenue, Bronx, NY 10461', phone: '+1 (718) 555-1100', hours: '7:00 AM - 10:00 PM', businessType: 'hospital' },
-  { id: 'hospital-3', name: 'City General Hospital - East Center', address: '500 Wellness Drive, Queens, NY 11365', phone: '+1 (718) 555-1200', hours: '8:00 AM - 8:00 PM', businessType: 'hospital' },
-  { id: 'hospital-4', name: 'City General Hospital - Community Clinic', address: '75 Care Street, Brooklyn, NY 11201', phone: '+1 (718) 555-1300', hours: '8:00 AM - 6:00 PM', businessType: 'hospital' },
-
-  // Government Offices
-  { id: 'gov-1', name: 'Department of Motor Vehicles - Manhattan', address: '11 Greenwich Street, New York, NY 10004', phone: '+1 (212) 555-2000', hours: '8:30 AM - 4:30 PM', businessType: 'government' },
-  { id: 'gov-2', name: 'City Hall Services Center', address: '1 City Hall Plaza, New York, NY 10007', phone: '+1 (212) 555-2100', hours: '9:00 AM - 5:00 PM', businessType: 'government' },
-  { id: 'gov-3', name: 'Social Services Office - Brooklyn', address: '350 Jay Street, Brooklyn, NY 11201', phone: '+1 (718) 555-2200', hours: '9:00 AM - 5:00 PM', businessType: 'government' },
-  { id: 'gov-4', name: 'Tax Assessment Office', address: '66 John Street, New York, NY 10038', phone: '+1 (212) 555-2300', hours: '9:00 AM - 4:00 PM', businessType: 'government' },
-
-  // Service Centers
-  { id: 'service-1', name: 'TechSupport Solutions - Manhattan', address: '200 Tech Plaza, New York, NY 10018', phone: '+1 (212) 555-3000', hours: '8:00 AM - 8:00 PM', businessType: 'service' },
-  { id: 'service-2', name: 'Customer Care Hub - Brooklyn', address: '450 Service Avenue, Brooklyn, NY 11215', phone: '+1 (718) 555-3100', hours: '9:00 AM - 7:00 PM', businessType: 'service' },
-  { id: 'service-3', name: 'Utility Services Center', address: '100 Utility Road, Queens, NY 11375', phone: '+1 (718) 555-3200', hours: '8:00 AM - 6:00 PM', businessType: 'service' },
-  { id: 'service-4', name: 'Support Central - Midtown', address: '300 Support Street, New York, NY 10036', phone: '+1 (212) 555-3300', hours: '9:00 AM - 8:00 PM', businessType: 'service' },
 ];
+
+// Helper function to get branches by industry (handles both old and new naming)
+export function getBranchesByIndustry(industryId: string): Branch[] {
+  return branches.filter(b => b.businessType === industryId);
+}

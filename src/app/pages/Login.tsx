@@ -101,10 +101,7 @@ export function Login() {
               <div className="flex items-start gap-2">
                 <Info className="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <div className="text-sm">
-                  <p>Customer portal demo account:</p>
-                  <p className="mt-1 font-mono bg-blue-100 px-2 py-1 rounded inline-block text-xs">Email: demo@customer.com</p>
-                  <p className="mt-1 font-mono bg-blue-100 px-2 py-1 rounded inline-block text-xs ml-2">Password: demo123</p>
-                  <p className="mt-2 text-blue-600">Staff? Visit <span className="font-semibold">Staff Portal</span> from the home page</p>
+                  <p className="text-blue-600">Staff? Visit <span className="font-semibold">Staff Portal</span> from the home page</p>
                 </div>
               </div>
             </div>
