@@ -1,1335 +1,330 @@
-import { useState, useEffect, useRef } from 'react';
-import { Bell, Play, CheckCircle, User, Clock, Hash, AlertTriangle, Building2, Briefcase, Calendar, Plus, X, UserX, RefreshCw, ArrowRightLeft, QrCode, Smartphone, Globe, MessageSquare, Send, UserPlus, Coffee, History, FileText } from 'lucide-react';
-import { useIndustry } from '../contexts/IndustryContext';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router';
-import { industryServices } from '../data/industryServices';
-import { useRealtimeQueue } from '../../hooks/useRealtimeQueue';
-import { updateTicketStatus } from '../../services/queueService';
-import type { QueueTicket } from '../../lib/supabase';
+import {
+  MapPin, Briefcase, CheckCircle2, X, Play, Clock, RefreshCw, Users, User,
+} from 'lucide-react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
-interface CustomerHistory {
-  visitDate: string;
-  service: string;
-  status: string;
+type QueueTicket = {
+  id: number;
+  ticket_number: string;
+  customer_name: string;
+  service_name: string;
+  branch_name: string;
+  status: 'waiting' | 'serving' | 'completed' | 'cancelled';
+  position: number;
+  estimated_wait: number;
+  issued_at: string;
+  called_at: string | null;
   notes: string;
+};
+
+type QueueStats = {
+  waiting: number;
+  serving: number;
+  completed: number;
+  avg_wait: number;
+};
+
+function initials(name: string) {
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
-interface TransferInfo {
-  fromCounter: string;
-  fromDepartment: string;
-  reason: string;
-  transferredBy: string;
-  transferredAt: string;
+function shiftTime(startMs: number) {
+  const s = Math.floor((Date.now() - startMs) / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h === 0) return `${m}m on duty`;
+  return `${h}h ${m}m on duty`;
 }
 
-interface QueueItem {
-  id: string;
-  ticketNumber: string;
-  service: string;
-  customerName: string;
-  waitTime: string;
-  totalWaitMins: number;
-  status: 'waiting' | 'serving' | 'completed';
-  origin: 'QR Code' | 'Mobile App' | 'Web';
-  joinedAt: string;
-  customerEmail?: string;
-  isReturningCustomer?: boolean;
-  previousVisits?: number;
-  transferInfo?: TransferInfo;
-  history?: CustomerHistory[];
-  staffNotes?: string;
+function elapsed(iso: string) {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
 }
 
 export function StaffDashboard() {
-  const { industry } = useIndustry();
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
-  const [assignedCounter, setAssignedCounter] = useState(3);
-  const [staffIndustry, setStaffIndustry] = useState('');
-  const [staffInfo, setStaffInfo] = useState({
-    name: 'John Smith',
-    branch: 'Downtown Main Branch',
-    position: 'Customer Service Representative',
-    department: 'Retail Banking',
-    employeeId: 'EMP-2024-1156',
-    handlingServices: [] as string[]
-  });
-  const [currentlyServing, setCurrentlyServing] = useState<QueueItem | null>(null);
-  const [waitingQueue, setWaitingQueue] = useState<QueueItem[]>([]);
-  const [completedToday, setCompletedToday] = useState(12);
-  const [avgServiceTime, setAvgServiceTime] = useState('8 min');
-  const [notifications, setNotifications] = useState<string[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [isAvailable, setIsAvailable] = useState(true);
-  const [selectedCustomer, setSelectedCustomer] = useState<QueueItem | null>(null);
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferNotes, setTransferNotes] = useState('');
-  const [transferDepartment, setTransferDepartment] = useState('');
-  const [showManualEntry, setShowManualEntry] = useState(false);
-  const [manualEntryForm, setManualEntryForm] = useState({
-    customerName: '',
-    service: ''
-  });
-  const [customerViewTab, setCustomerViewTab] = useState<'details' | 'history'>('details');
-  const [customerNotes, setCustomerNotes] = useState('');
+  const [waiting, setWaiting] = useState<QueueTicket[]>([]);
+  const [serving, setServing] = useState<QueueTicket | null>(null);
+  const [stats, setStats] = useState<QueueStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [active, setActive] = useState(true);
+  const [completing, setCompleting] = useState(false);
+  const [calling, setCalling] = useState<number | null>(null);
+  const [tick, setTick] = useState(0);
+  const shiftStart = useRef(Date.now());
 
-  // Track previous ticket IDs to detect new tickets
-  const previousTicketIds = useRef<string[]>([]);
-
-  // Get staff's industry from localStorage
-  const staffIndustryId = localStorage.getItem('sqms_staff_industry') || localStorage.getItem('sqms_admin_industry') || '';
-
-  // Real-time subscription to queue tickets for this industry
-  const { tickets: realtimeTickets, loading: ticketsLoading } = useRealtimeQueue(staffIndustryId || undefined);
-
-  // Check authentication
+  // Timer tick for elapsed display
   useEffect(() => {
-    if (authLoading) return;
+    const id = setInterval(() => setTick(n => n + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
 
-    if (!user) {
-      navigate('/staff-portal');
-      return;
-    }
+  const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+  const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
 
-    // Only allow staff and admin to access this page
-    if (user.role !== 'staff' && user.role !== 'admin') {
-      navigate('/dashboard');
-      return;
-    }
-  }, [user, authLoading, navigate]);
+  const fetchData = useCallback(async () => {
+    try {
+      const [waitRes, servRes, statRes] = await Promise.all([
+        fetch(`${SERVER}/queues?status=waiting`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues?status=called`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues/status`, { headers }).catch(() => null),
+      ]);
 
-  // Set industry-specific initial queue and services
+      const toArr = async (res: Response | null): Promise<QueueTicket[]> => {
+        if (!res?.ok) return [];
+        const d = await res.json().catch(() => []);
+        return Array.isArray(d) ? d : d?.results ?? [];
+      };
+
+      const [waitArr, servArr, statData] = await Promise.all([toArr(waitRes), toArr(servRes), statRes?.ok ? statRes.json().catch(() => null) : null]);
+      setWaiting(waitArr);
+      setServing(servArr.length > 0 ? servArr[0] : null);
+      if (statData) setStats(statData);
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
-    // Load staff info from localStorage
-    const storedStaffIndustry = localStorage.getItem('sqms_staff_industry') || '';
-    const storedStaffName = localStorage.getItem('sqms_user_name') || 'John Smith';
-    const storedCounter = localStorage.getItem('sqms_staff_counter') || '3';
-
-    setStaffIndustry(storedStaffIndustry);
-    setAssignedCounter(Number(storedCounter));
-
-    // Set industry-specific staff info
-    const industryStaffInfo: { [key: string]: any } = {
-      banking: {
-        name: storedStaffName,
-        branch: 'Manhattan Financial Center',
-        position: 'Customer Service Representative',
-        department: 'Account Services',
-        employeeId: 'BNK-2024-1156',
-        handlingServices: ['Account Opening', 'General Banking Inquiry', 'Document Verification']
-      },
-      healthcare: {
-        name: storedStaffName,
-        branch: 'Main Hospital - Downtown',
-        position: 'Medical Services Coordinator',
-        department: 'Medical Services',
-        employeeId: 'HLC-2024-2487',
-        handlingServices: ['General Consultation', 'Specialist Appointment', 'Lab Tests']
-      },
-      retail: {
-        name: storedStaffName,
-        branch: 'Flagship Store - Downtown',
-        position: 'Customer Service Associate',
-        department: 'Customer Support',
-        employeeId: 'RTL-2024-3891',
-        handlingServices: ['Product Return', 'Customer Service', 'Product Consultation']
-      },
-      government: {
-        name: storedStaffName,
-        branch: 'City Hall - Main Office',
-        position: 'Public Services Officer',
-        department: 'Licensing Services',
-        employeeId: 'GOV-2024-5623',
-        handlingServices: ['License Renewal', 'Permit Application', 'General Inquiry']
-      },
-      education: {
-        name: storedStaffName,
-        branch: 'Main Campus - Admissions',
-        position: 'Student Services Advisor',
-        department: 'Admissions',
-        employeeId: 'EDU-2024-7845',
-        handlingServices: ['Student Admissions', 'Academic Counseling', 'Registration Support']
-      },
-      corporate: {
-        name: storedStaffName,
-        branch: 'Headquarters - Main Building',
-        position: 'Service Desk Specialist',
-        department: 'IT Services',
-        employeeId: 'CRP-2024-9012',
-        handlingServices: ['IT Support', 'Meeting Room Booking', 'General Admin Support']
-      }
-    };
-
-    if (storedStaffIndustry && industryStaffInfo[storedStaffIndustry]) {
-      setStaffInfo(industryStaffInfo[storedStaffIndustry]);
-    }
-
-    if (!industry) return;
-
-    const industryKey = industry.id as keyof typeof industryServices;
-    const servicesData = industryServices[industryKey] || industryServices.banking;
-    setServices(servicesData);
-
-    // Generate demo customers based on available services
-    const demoCustomers = [
-      {
-        name: 'Sarah Johnson',
-        email: 'sarah.j@email.com',
-        mins: 5,
-        origin: 'Mobile App' as const,
-        isReturning: true,
-        previousVisits: 3,
-        history: [
-          { visitDate: '2026-03-15', service: servicesData[0]?.name || 'Service 1', status: 'Completed', notes: 'Customer needed help with account setup. Very patient and cooperative.' },
-          { visitDate: '2026-02-28', service: servicesData[1]?.name || 'Service 2', status: 'Completed', notes: 'Follow-up visit for loan application. All documents verified.' },
-          { visitDate: '2026-01-10', service: servicesData[0]?.name || 'Service 1', status: 'Completed', notes: 'Initial consultation completed successfully.' }
-        ]
-      },
-      {
-        name: 'Michael Chen',
-        email: 'michael.c@email.com',
-        mins: 10,
-        origin: 'QR Code' as const,
-        isReturning: false,
-        transferred: true,
-        transferInfo: {
-          fromCounter: '5',
-          fromDepartment: 'Loan Services',
-          reason: 'Customer needs account opening assistance which is handled by this department',
-          transferredBy: 'Jane Smith',
-          transferredAt: new Date(Date.now() - 3 * 60000).toISOString()
-        }
-      },
-      {
-        name: 'Emily Davis',
-        email: 'emily.d@email.com',
-        mins: 15,
-        origin: 'Web' as const,
-        isReturning: false
-      },
-      {
-        name: 'Robert Martinez',
-        email: 'robert.m@email.com',
-        mins: 8,
-        origin: 'Mobile App' as const,
-        isReturning: true,
-        previousVisits: 1,
-        history: [
-          { visitDate: '2026-03-20', service: servicesData[2]?.name || 'Service 3', status: 'Completed', notes: 'Quick service. Customer was satisfied.' }
-        ]
-      },
-      {
-        name: 'Jessica Williams',
-        email: 'jessica.w@email.com',
-        mins: 12,
-        origin: 'QR Code' as const,
-        isReturning: false
-      }
-    ];
-
-    const handlingServicesForIndustry = industryStaffInfo[storedStaffIndustry]?.handlingServices || [];
-
-    const initialQueue: QueueItem[] = demoCustomers.slice(0, 5).map((customer, index) => ({
-      id: String(index + 1),
-      ticketNumber: `${industry?.id?.toUpperCase().substring(0, 3) || 'GEN'}-${1024 + index}`,
-      service: servicesData[index % servicesData.length]?.name || 'General Service',
-      customerName: customer.name,
-      waitTime: `${customer.mins} min`,
-      totalWaitMins: customer.mins,
-      status: 'waiting',
-      origin: customer.origin,
-      joinedAt: new Date(Date.now() - customer.mins * 60000).toISOString(),
-      customerEmail: customer.email,
-      isReturningCustomer: customer.isReturning,
-      previousVisits: customer.previousVisits || 0,
-      transferInfo: customer.transferred ? customer.transferInfo : undefined,
-      history: customer.history || [],
-      staffNotes: ''
-    }));
-
-    // Filter queue to only show services this staff handles
-    const filteredQueue = initialQueue.filter(item =>
-      handlingServicesForIndustry.includes(item.service)
-    );
-    setWaitingQueue(filteredQueue);
-
-    // Load completed count from localStorage
-    const today = new Date().toDateString();
-    const completedKey = `sqms_completed_${storedStaffName}_${today}`;
-    const savedCompleted = localStorage.getItem(completedKey);
-    if (savedCompleted) {
-      setCompletedToday(parseInt(savedCompleted));
-    } else {
-      setCompletedToday(0);
-    }
-
-    // Listen for new customers joining queue for services this staff handles
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'sqms_queue' && e.newValue) {
-        const queueData = JSON.parse(e.newValue);
-        // Filter by services this staff handles
-        const serviceQueue = queueData.filter((ticket: any) =>
-          handlingServicesForIndustry.includes(ticket.service)
-        );
-
-        // Check for new tickets
-        const existingIds = waitingQueue.map(item => item.id);
-        const newTickets = serviceQueue.filter((ticket: any) => !existingIds.includes(ticket.id));
-
-        if (newTickets.length > 0) {
-          newTickets.forEach((ticket: any) => {
-            addNotification(`New customer joined: ${ticket.ticketNumber} - ${ticket.customerName} for ${ticket.service}`);
-          });
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [industry, assignedCounter]);
-
-  // Process real-time tickets from Supabase and update waiting queue
-  useEffect(() => {
-    if (ticketsLoading || !realtimeTickets) return;
-
-    // Get services this staff handles (from user's assigned services in Supabase)
-    const storedStaffIndustry = localStorage.getItem('sqms_staff_industry') || '';
-    const industryStaffInfo: { [key: string]: any } = {
-      banking: {
-        handlingServices: ['Account Opening', 'General Banking Inquiry', 'Document Verification']
-      },
-      healthcare: {
-        handlingServices: ['General Consultation', 'Specialist Appointment', 'Lab Tests']
-      },
-      retail: {
-        handlingServices: ['Product Return', 'Customer Service', 'Product Consultation']
-      },
-      government: {
-        handlingServices: ['License Renewal', 'Permit Application', 'General Inquiry']
-      },
-      education: {
-        handlingServices: ['Student Admissions', 'Academic Counseling', 'Registration Support']
-      },
-      corporate: {
-        handlingServices: ['IT Support', 'Meeting Room Booking', 'General Admin Support']
-      }
-    };
-
-    const handlingServices = industryStaffInfo[storedStaffIndustry]?.handlingServices || [];
-
-    // Convert Supabase tickets to QueueItem format
-    const formattedTickets: QueueItem[] = realtimeTickets
-      .filter(ticket => ticket.status === 'waiting' || ticket.status === 'called')
-      .map(ticket => {
-        const joinTime = new Date(ticket.created_at).getTime();
-        const now = Date.now();
-        const mins = Math.floor((now - joinTime) / 60000);
-
-        // Access joined customer and service data
-        const customer = (ticket as any).customer;
-        const service = (ticket as any).service;
-
-        return {
-          id: ticket.id,
-          ticketNumber: ticket.ticket_number,
-          service: service?.name || services.find(s => s.id === ticket.service_id)?.name || 'General Service',
-          customerName: customer?.full_name || 'Customer',
-          waitTime: `${mins} min`,
-          totalWaitMins: mins,
-          status: ticket.status === 'waiting' ? 'waiting' : 'serving',
-          origin: 'Mobile App' as const,
-          joinedAt: ticket.created_at,
-          customerEmail: customer?.email || '',
-          isReturningCustomer: false,
-          previousVisits: 0,
-          history: [],
-          staffNotes: ''
-        };
-      });
-
-    // Filter by services this staff handles if configured
-    const filteredTickets = handlingServices.length > 0
-      ? formattedTickets.filter(item => handlingServices.includes(item.service))
-      : formattedTickets;
-
-    // Update waiting queue with real-time tickets
-    setWaitingQueue(filteredTickets);
-
-    // Check for new tickets and notify
-    const currentIds = filteredTickets.map(item => item.id);
-    const newTickets = filteredTickets.filter(ticket => !previousTicketIds.current.includes(ticket.id));
-
-    if (newTickets.length > 0) {
-      newTickets.forEach(ticket => {
-        addNotification(`New customer joined: ${ticket.ticketNumber} for ${ticket.service}`);
-      });
-    }
-
-    // Update previous IDs
-    previousTicketIds.current = currentIds;
-  }, [realtimeTickets, ticketsLoading, services]);
-
-  // Update wait times every minute
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setWaitingQueue(prevQueue =>
-        prevQueue.map(item => {
-          const joinTime = new Date(item.joinedAt).getTime();
-          const now = Date.now();
-          const mins = Math.floor((now - joinTime) / 60000);
-          return {
-            ...item,
-            totalWaitMins: mins,
-            waitTime: `${mins} min`
-          };
-        })
-      );
-
-      setCurrentlyServing(prev => {
-        if (!prev) return null;
-        const joinTime = new Date(prev.joinedAt).getTime();
-        const now = Date.now();
-        const mins = Math.floor((now - joinTime) / 60000);
-        return {
-          ...prev,
-          totalWaitMins: mins,
-          waitTime: `${mins} min`
-        };
-      });
-    }, 60000);
-
+    fetchData();
+    const interval = setInterval(() => fetchData(), 10000);
     return () => clearInterval(interval);
-  }, []); // Empty array - we use functional updates
+  }, [fetchData]);
 
-  const addNotification = (message: string) => {
-    setNotifications(prev => [message, ...prev].slice(0, 5));
+  const handleCall = async (ticket: QueueTicket) => {
+    if (serving || calling !== null) return;
+    setCalling(ticket.id);
+    await fetch(`${SERVER}/queues/${ticket.id}/call`, { method: 'POST', headers }).catch(() => null);
+    setCalling(null);
+    fetchData();
   };
 
-  const handleRecall = (customer: QueueItem) => {
-    addNotification(`🔔 RECALL: ${customer.ticketNumber} - ${customer.customerName}. Customer re-notified!`);
-    alert(`Recall notification sent to ${customer.customerName} (${customer.ticketNumber})`);
+  const handleComplete = async () => {
+    if (!serving || completing) return;
+    setCompleting(true);
+    const id = serving.id;
+    setServing(null);
+    await fetch(`${SERVER}/queues/${id}/complete`, { method: 'POST', headers }).catch(() => null);
+    setCompleting(false);
+    fetchData();
   };
 
-  const handleNoShow = (customer: QueueItem) => {
-    if (confirm(`Mark ${customer.customerName} (${customer.ticketNumber}) as NO-SHOW?`)) {
-      setWaitingQueue(waitingQueue.filter(item => item.id !== customer.id));
-      addNotification(`❌ NO-SHOW: ${customer.ticketNumber} - ${customer.customerName} removed from queue`);
-    }
+  const handleCancel = async (ticket: QueueTicket) => {
+    if (!window.confirm(`Cancel ticket ${ticket.ticket_number}?`)) return;
+    await fetch(`${SERVER}/queues/${ticket.id}/cancel`, { method: 'POST', headers }).catch(() => null);
+    fetchData();
   };
 
-  const handleTransfer = () => {
-    if (!currentlyServing || !transferDepartment || !transferNotes) {
-      alert('Please fill in all transfer details');
-      return;
-    }
-
-    addNotification(`🔄 TRANSFER: ${currentlyServing.ticketNumber} transferred to ${transferDepartment}. Notes: ${transferNotes}`);
-    alert(`Customer ${currentlyServing.customerName} transferred to ${transferDepartment}`);
-
-    setCurrentlyServing(null);
-    setShowTransferModal(false);
-    setTransferNotes('');
-    setTransferDepartment('');
-  };
-
-  const handleManualEntry = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    const newTicket: QueueItem = {
-      id: String(Date.now()),
-      ticketNumber: `Q${assignedCounter}1-${1000 + waitingQueue.length + 1}`,
-      service: manualEntryForm.service,
-      customerName: manualEntryForm.customerName,
-      waitTime: '0 min',
-      totalWaitMins: 0,
-      status: 'waiting',
-      origin: 'Web',
-      joinedAt: new Date().toISOString()
-    };
-
-    setWaitingQueue([...waitingQueue, newTicket]);
-    addNotification(`➕ Manual Entry: ${newTicket.ticketNumber} - ${manualEntryForm.customerName} added to queue`);
-
-    setManualEntryForm({ customerName: '', service: '' });
-    setShowManualEntry(false);
-  };
-
-  const getOriginIcon = (origin: string) => {
-    switch (origin) {
-      case 'QR Code':
-        return <QrCode className="w-4 h-4" />;
-      case 'Mobile App':
-        return <Smartphone className="w-4 h-4" />;
-      case 'Web':
-        return <Globe className="w-4 h-4" />;
-      default:
-        return <Globe className="w-4 h-4" />;
-    }
-  };
-
-  const handleCallNext = async () => {
-    if (!isAvailable) {
-      alert('You are currently on break. Please set status to Available first.');
-      return;
-    }
-
-    if (waitingQueue.length === 0) {
-      alert('No customers waiting in queue for services you handle');
-      return;
-    }
-
-    // Call next customer from any service this staff handles
-    const nextCustomer = waitingQueue[0];
-
-    // Verify this staff can handle this service
-    if (!staffInfo.handlingServices.includes(nextCustomer.service)) {
-      alert(`You cannot handle ${nextCustomer.service}. Your services: ${staffInfo.handlingServices.join(', ')}`);
-      return;
-    }
-
-    // Update ticket status to 'called' in Supabase
-    const { error } = await updateTicketStatus(nextCustomer.id, 'called', String(assignedCounter));
-
-    if (error) {
-      console.error('Error calling customer:', error);
-      alert('Failed to call customer. Please try again.');
-      return;
-    }
-
-    setCurrentlyServing(nextCustomer);
-    setWaitingQueue(waitingQueue.slice(1));
-    addNotification(`Now calling ${nextCustomer.ticketNumber} - ${nextCustomer.customerName} for ${nextCustomer.service}`);
-  };
-
-  const handleCompleteService = async () => {
-    if (!currentlyServing) return;
-
-    // Update ticket status to 'completed' in Supabase
-    const { error } = await updateTicketStatus(currentlyServing.id, 'completed');
-
-    if (error) {
-      console.error('Error completing service:', error);
-      alert('Failed to mark service as completed. Please try again.');
-      return;
-    }
-
-    const newCompleted = completedToday + 1;
-    setCompletedToday(newCompleted);
-
-    // Save completed count to localStorage
-    const today = new Date().toDateString();
-    const completedKey = `sqms_completed_${staffInfo.name}_${today}`;
-    localStorage.setItem(completedKey, String(newCompleted));
-
-    // Save completed ticket to history for this staff member
-    const completedTicketsKey = `sqms_completed_tickets_${staffInfo.name}_${today}`;
-    const existingCompleted = JSON.parse(localStorage.getItem(completedTicketsKey) || '[]');
-    const completedTicket = {
-      ...currentlyServing,
-      status: 'completed',
-      completedAt: new Date().toISOString(),
-      servedAt: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    };
-    localStorage.setItem(completedTicketsKey, JSON.stringify([...existingCompleted, completedTicket]));
-
-    addNotification(`Completed service for ${currentlyServing.ticketNumber}`);
-    setCurrentlyServing(null);
-  };
-
-  const handleSkipCustomer = () => {
-    if (!currentlyServing) return;
-
-    // Put customer back at end of queue
-    setWaitingQueue([...waitingQueue, currentlyServing]);
-    addNotification(`${currentlyServing.ticketNumber} moved to end of queue`);
-    setCurrentlyServing(null);
-  };
-
-  const stats = [
-    {
-      label: 'Assigned Counter',
-      value: String(assignedCounter),
-      icon: Hash,
-      color: 'from-blue-600 to-blue-700'
-    },
-    {
-      label: 'In Queue',
-      value: String(waitingQueue.length),
-      icon: User,
-      color: 'from-orange-600 to-orange-700'
-    },
-    {
-      label: 'Completed Today',
-      value: String(completedToday),
-      icon: CheckCircle,
-      color: 'from-green-600 to-green-700'
-    },
-    {
-      label: 'Avg Service Time',
-      value: avgServiceTime,
-      icon: Clock,
-      color: 'from-purple-600 to-purple-700'
-    },
-  ];
+  const staffName = user?.full_name ?? 'Staff Member';
+  const roleBadge = user?.role === 'admin' || user?.role === 'superadmin'
+    ? { label: 'Admin', color: '#7c3aed', bg: '#f5f3ff' }
+    : { label: 'Staff', color: '#2563eb', bg: '#eff6ff' };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header with Status Toggle */}
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <h1 className="text-3xl text-slate-800 mb-2">Staff Dashboard</h1>
-          <p className="text-slate-600">Manage your assigned counter and serve customers</p>
-        </div>
+    <div style={{ padding: 16, paddingBottom: 32, display: 'flex', flexDirection: 'column', gap: 14, backgroundColor: '#f8fafc' }}>
 
-        {/* Status Toggle */}
-        <div className="bg-white rounded-2xl shadow-lg p-4 border border-slate-200">
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-600">Status:</span>
-            <button
-              onClick={() => setIsAvailable(!isAvailable)}
-              className={`relative inline-flex h-8 w-16 items-center rounded-full transition-colors ${
-                isAvailable ? 'bg-green-500' : 'bg-orange-500'
-              }`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                  isAvailable ? 'translate-x-9' : 'translate-x-1'
-                }`}
-              />
-            </button>
-            <div className="flex items-center gap-2">
-              {isAvailable ? (
-                <>
-                  <CheckCircle className="w-5 h-5 text-green-600" />
-                  <span className="text-green-600 font-semibold">Available</span>
-                </>
-              ) : (
-                <>
-                  <Coffee className="w-5 h-5 text-orange-600" />
-                  <span className="text-orange-600 font-semibold">On Break</span>
-                </>
-              )}
+      {/* Identity card */}
+      <div style={{ backgroundColor: '#fff', borderRadius: 20, padding: 16, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
+        <div style={{ width: 52, height: 52, borderRadius: 26, backgroundColor: '#dbeafe', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: 18, fontWeight: 900, color: '#1d4ed8' }}>{initials(staffName)}</span>
+        </div>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', flex: 1 }}>{staffName}</span>
+            <div style={{ borderRadius: 6, padding: '3px 8px', backgroundColor: roleBadge.bg }}>
+              <span style={{ fontSize: 10, fontWeight: 800, color: roleBadge.color }}>{roleBadge.label}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Staff Information Card */}
-      <div className="bg-gradient-to-r from-blue-600 to-teal-600 rounded-2xl shadow-xl p-6 mb-8 text-white">
-        <div className="flex items-start justify-between">
-          <div className="flex items-start gap-4">
-            <div className="bg-white/20 rounded-xl p-3 backdrop-blur-sm">
-              <User className="w-8 h-8 text-white" />
+          {(user as any)?.assigned_branch_name && (
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <MapPin size={12} color="#64748b" />
+              <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{(user as any).assigned_branch_name}</span>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold mb-1">{staffInfo.name}</h2>
-              <p className="text-white/90 mb-4">{staffInfo.position}</p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-white/80" />
-                  <div>
-                    <div className="text-xs text-white/70">Branch</div>
-                    <div className="font-semibold">{staffInfo.branch}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Briefcase className="w-5 h-5 text-white/80" />
-                  <div>
-                    <div className="text-xs text-white/70">Department</div>
-                    <div className="font-semibold">{staffInfo.department}</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Hash className="w-5 h-5 text-white/80" />
-                  <div>
-                    <div className="text-xs text-white/70">Employee ID</div>
-                    <div className="font-semibold">{staffInfo.employeeId}</div>
-                  </div>
-                </div>
-              </div>
-
-              {industry && (
-                <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-white/10 rounded-lg backdrop-blur-sm border border-white/20">
-                  <div className="text-xs text-white/70">Industry:</div>
-                  <div className="font-semibold">{industry.name}</div>
-                </div>
-              )}
-
-              {staffInfo.handlingServices && staffInfo.handlingServices.length > 0 && (
-                <div className="mt-4">
-                  <div className="text-xs text-white/70 mb-2">Handling Services:</div>
-                  <div className="flex flex-wrap gap-2">
-                    {staffInfo.handlingServices.map((service: string, idx: number) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-white/20 rounded-lg text-sm backdrop-blur-sm border border-white/30"
-                      >
-                        {service}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
+          )}
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Briefcase size={12} color="#64748b" />
+            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 500 }}>{shiftTime(shiftStart.current)}</span>
           </div>
         </div>
+        <button
+          onClick={() => setActive(p => !p)}
+          style={{
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 5,
+            padding: '7px 10px', borderRadius: 12,
+            backgroundColor: active ? '#ecfdf5' : '#fffbeb',
+            border: `1px solid ${active ? '#a7f3d0' : '#fde68a'}`,
+            cursor: 'pointer',
+          }}
+        >
+          <div style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: active ? '#10b981' : '#f59e0b' }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: active ? '#065f46' : '#92400e' }}>
+            {active ? 'Active' : 'On Break'}
+          </span>
+        </button>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <div key={index} className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
-              <div className={`bg-gradient-to-r ${stat.color} rounded-xl p-3 w-12 h-12 flex items-center justify-center mb-4`}>
-                <Icon className="w-6 h-6 text-white" />
+      {/* Stats row */}
+      {loading && !stats ? (
+        <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="sqms-spinner" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #2563eb', borderTopColor: 'transparent' }} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'row', gap: 8 }}>
+          {[
+            { icon: Users, label: 'Waiting',    value: String(stats?.waiting   ?? 0), color: '#2563eb', bg: '#eff6ff' },
+            { icon: User,  label: 'Serving',    value: String(stats?.serving   ?? 0), color: '#059669', bg: '#ecfdf5' },
+            { icon: CheckCircle2, label: 'Done Today', value: String(stats?.completed ?? 0), color: '#7c3aed', bg: '#f5f3ff' },
+            { icon: Clock, label: 'Avg Wait',   value: `${stats?.avg_wait ?? 0}m`,    color: '#d97706', bg: '#fffbeb' },
+          ].map(item => {
+            const Icon = item.icon;
+            return (
+              <div key={item.label} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 14, padding: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, border: `1.5px solid ${item.bg}` }}>
+                <div style={{ width: 30, height: 30, borderRadius: 10, backgroundColor: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon size={16} color={item.color} />
+                </div>
+                <span style={{ fontSize: 18, fontWeight: 900, color: '#0f172a' }}>{item.value}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, textAlign: 'center' }}>{item.label}</span>
               </div>
-              <div className="text-3xl text-slate-800 mb-1">{stat.value}</div>
-              <div className="text-sm text-slate-600">{stat.label}</div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        {/* Currently Serving */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 mb-6">
-            <h2 className="text-2xl text-slate-800 mb-6">Currently Serving</h2>
+      {/* Currently Serving card */}
+      <div style={{
+        backgroundColor: active ? '#1e40af' : '#64748b',
+        borderRadius: 24, padding: 22, display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center',
+        boxShadow: `0 8px 24px rgba(${active ? '29,78,216' : '71,85,105'},0.35)`,
+      }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: active ? '#34d399' : '#94a3b8' }} />
+            <span style={{ fontSize: 10, fontWeight: 800, color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase', letterSpacing: 1.2 }}>Currently Serving</span>
+          </div>
+          {serving?.called_at && (
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#93c5fd', backgroundColor: 'rgba(255,255,255,0.1)', padding: '3px 8px', borderRadius: 8 }}>
+              {elapsed(serving.called_at)}
+            </span>
+          )}
+        </div>
 
-            {currentlyServing ? (
-              <div>
-                <div className="bg-gradient-to-r from-green-50 to-teal-50 border-2 border-green-300 rounded-xl p-6 mb-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="bg-green-600 text-white rounded-xl px-4 py-2">
-                      <div className="text-sm">Counter {assignedCounter}</div>
-                      <div className="text-2xl tracking-wider">{currentlyServing.ticketNumber}</div>
-                    </div>
-                    <div className="bg-green-600 rounded-full p-3 animate-pulse">
-                      <Play className="w-6 h-6 text-white" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <div>
-                      <div className="text-sm text-green-700">Customer Name</div>
-                      <div className="text-xl text-slate-800">{currentlyServing.customerName}</div>
-                    </div>
-                    <div>
-                      <div className="text-sm text-green-700">Service</div>
-                      <div className="text-lg text-slate-800">{currentlyServing.service}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div>
-                        <div className="text-sm text-green-700">Total Wait</div>
-                        <div className="text-lg text-slate-800 font-semibold">{currentlyServing.totalWaitMins} mins</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-green-700">Origin</div>
-                        <div className="flex items-center gap-2 text-slate-800">
-                          {getOriginIcon(currentlyServing.origin)}
-                          <span className="text-sm">{currentlyServing.origin}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <button
-                    onClick={handleCompleteService}
-                    className="py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                  >
-                    <CheckCircle className="w-5 h-5" />
-                    Complete
-                  </button>
-                  <button
-                    onClick={() => setShowTransferModal(true)}
-                    className="py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
-                  >
-                    <ArrowRightLeft className="w-5 h-5" />
-                    Transfer
-                  </button>
-                </div>
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => handleRecall(currentlyServing)}
-                    className="flex-1 py-3 border-2 border-orange-300 text-orange-600 rounded-xl hover:bg-orange-50 transition-all flex items-center justify-center gap-2"
-                  >
-                    <RefreshCw className="w-5 h-5" />
-                    Recall
-                  </button>
-                  <button
-                    onClick={() => handleNoShow(currentlyServing)}
-                    className="flex-1 py-3 border-2 border-red-300 text-red-600 rounded-xl hover:bg-red-50 transition-all flex items-center justify-center gap-2"
-                  >
-                    <UserX className="w-5 h-5" />
-                    No-Show
-                  </button>
-                  <button
-                    onClick={handleSkipCustomer}
-                    className="px-6 py-3 border-2 border-slate-300 text-slate-600 rounded-xl hover:bg-slate-50 transition-all"
-                  >
-                    Skip
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <User className="w-10 h-10 text-slate-400" />
-                </div>
-                <h3 className="text-xl text-slate-800 mb-2">No Customer Being Served</h3>
-                <p className="text-slate-600 mb-6">Call the next customer to start serving</p>
-                <button
-                  onClick={handleCallNext}
-                  disabled={waitingQueue.length === 0 || !isAvailable}
-                  className="px-8 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all flex items-center gap-2 mx-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Bell className="w-5 h-5" />
-                  {isAvailable ? 'Call Next Customer' : 'On Break - Unavailable'}
-                </button>
+        {serving ? (
+          <>
+            <span style={{ fontSize: 52, fontWeight: 900, color: '#fff', letterSpacing: 1, marginTop: 4 }}>{serving.ticket_number}</span>
+            <span style={{ fontSize: 16, fontWeight: 700, color: '#e2e8f0' }}>{serving.customer_name}</span>
+            <span style={{ fontSize: 13, color: '#93c5fd', fontWeight: 500 }}>{serving.service_name}</span>
+            {!!serving.notes && (
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                <span style={{ fontSize: 11, color: '#bfdbfe', fontWeight: 500 }}>{serving.notes}</span>
               </div>
             )}
-          </div>
-
-          {/* Waiting Queue */}
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl text-slate-800">Waiting Queue</h2>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowManualEntry(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-all text-sm"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Walk-In
-                </button>
-                <button
-                  onClick={handleCallNext}
-                  disabled={waitingQueue.length === 0 || currentlyServing !== null || !isAvailable}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                >
-                  <Bell className="w-4 h-4" />
-                  Call Next
-                </button>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'row', gap: 10, marginTop: 12, width: '100%' }}>
+              <button
+                onClick={handleComplete}
+                disabled={completing}
+                style={{ flex: 3, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#10b981', borderRadius: 14, padding: '14px 0', border: 'none', cursor: 'pointer', opacity: completing ? 0.6 : 1 }}
+              >
+                <CheckCircle2 size={16} color="#fff" />
+                <span style={{ fontSize: 14, fontWeight: 800, color: '#fff' }}>{completing ? 'Saving…' : 'Complete'}</span>
+              </button>
+              <button
+                onClick={() => handleCancel(serving)}
+                style={{ flex: 1.2, display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 14, padding: '14px 0', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}
+              >
+                <X size={16} color="#fca5a5" />
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#fca5a5' }}>Cancel</span>
+              </button>
             </div>
-
-            {waitingQueue.length === 0 ? (
-              <div className="text-center py-8 text-slate-400">
-                <CheckCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No customers in queue</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {waitingQueue.map((item, index) => (
-                  <button
-                    key={item.id}
-                    onClick={() => setSelectedCustomer(item)}
-                    className="w-full border-2 border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-blue-300 transition-all text-left"
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-blue-600 text-white rounded-lg px-3 py-2 min-w-[100px] text-center">
-                          <div className="text-xs opacity-80">Position {index + 1}</div>
-                          <div className="text-sm tracking-wider">{item.ticketNumber}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-slate-600">Service</div>
-                          <div className="text-slate-800">{item.service}</div>
-                        </div>
-                        <div>
-                          <div className="text-sm text-slate-600">Counter</div>
-                          <div className="text-slate-800 font-semibold">#{item.ticketNumber.match(/Q(\d+)/)?.[1] || 'N/A'}</div>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-sm text-slate-600">Total Wait</div>
-                        <div className="text-lg font-semibold text-orange-600">{item.totalWaitMins} mins</div>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        <User className="w-4 h-4" />
-                        <span>{item.customerName}</span>
-                        {item.isReturningCustomer && (
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold ml-2">
-                            Returning
-                          </span>
-                        )}
-                        {item.transferInfo && (
-                          <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-xs rounded-full font-semibold ml-2">
-                            Transferred
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-slate-600">
-                        {getOriginIcon(item.origin)}
-                        <span>{item.origin}</span>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+          </>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, padding: '12px 0' }}>
+            <User size={44} color="rgba(255,255,255,0.25)" />
+            <span style={{ fontSize: 16, fontWeight: 800, color: 'rgba(255,255,255,0.7)', textAlign: 'center' }}>No customer being served</span>
+            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)', textAlign: 'center' }}>
+              {!active ? 'You are on break' : waiting.length === 0 ? 'Queue is empty' : 'Call the next customer below'}
+            </span>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Notifications Panel */}
-        <div>
-          <div className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 sticky top-24">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-teal-600 rounded-lg p-3">
-                <Bell className="w-6 h-6 text-white" />
-              </div>
-              <h2 className="text-2xl text-slate-800">Activity Log</h2>
-            </div>
-
-            <div className="space-y-3 max-h-[500px] overflow-y-auto">
-              {notifications.length === 0 ? (
-                <div className="text-center py-8 text-slate-400">
-                  <Bell className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p className="text-sm">No activity yet</p>
-                </div>
-              ) : (
-                notifications.map((notification, index) => (
-                  <div
-                    key={index}
-                    className="bg-teal-50 border border-teal-200 rounded-lg p-3 text-sm text-teal-800"
-                  >
-                    <div className="flex items-start gap-2">
-                      <Bell className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1">
-                        <p>{notification}</p>
-                        <div className="text-xs text-teal-600 mt-1">Just now</div>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Counter Status */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl shadow-lg p-6 text-white mt-6">
-            <h3 className="text-xl mb-4">Your Counter Status</h3>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-white/80">Counter Number</span>
-                <span className="text-2xl">{assignedCounter}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/80">Status</span>
-                <span className="text-green-300">● Active</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-white/80">Shift</span>
-                <span>9:00 AM - 5:00 PM</span>
-              </div>
-            </div>
-          </div>
+      {/* Waiting Queue */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+        <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Waiting Queue</span>
+        <div style={{ borderRadius: 999, padding: '4px 10px', backgroundColor: waiting.length > 0 ? '#eff6ff' : '#f1f5f9' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: waiting.length > 0 ? '#1d4ed8' : '#94a3b8' }}>{waiting.length} waiting</span>
         </div>
       </div>
 
-      {/* Transfer Modal */}
-      {showTransferModal && currentlyServing && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="bg-blue-100 rounded-lg p-3">
-                    <ArrowRightLeft className="w-6 h-6 text-blue-600" />
-                  </div>
-                  <h2 className="text-2xl text-slate-800">Transfer Customer</h2>
-                </div>
-                <button
-                  onClick={() => setShowTransferModal(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
+      {loading && waiting.length === 0 ? (
+        <div style={{ backgroundColor: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="sqms-spinner" style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #2563eb', borderTopColor: 'transparent' }} />
+        </div>
+      ) : waiting.length === 0 ? (
+        <div style={{ backgroundColor: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+          <CheckCircle2 size={44} color="#a7f3d0" />
+          <span style={{ fontSize: 16, fontWeight: 800, color: '#0f172a' }}>Queue is clear</span>
+          <span style={{ fontSize: 13, color: '#94a3b8', fontWeight: 500 }}>No customers waiting right now</span>
+        </div>
+      ) : (
+        waiting.map((ticket, idx) => (
+          <div key={ticket.id} style={{ backgroundColor: '#fff', borderRadius: 18, border: '1px solid #e2e8f0', padding: 14, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12, boxShadow: '0 1px 6px rgba(15,23,42,0.03)' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0', flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 900, color: '#475569' }}>{String(idx + 1).padStart(2, '0')}</span>
               </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
-                <div className="text-sm text-blue-800">
-                  <p className="font-semibold">Customer: {currentlyServing.customerName}</p>
-                  <p>Ticket: {currentlyServing.ticketNumber}</p>
-                  <p>Service: {currentlyServing.service}</p>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <span style={{ fontSize: 14, fontWeight: 900, color: '#0f172a' }}>{ticket.ticket_number}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{ticket.customer_name}</span>
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+                  <Briefcase size={11} color="#94a3b8" />
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>{ticket.service_name}</span>
+                  <span style={{ fontSize: 11, color: '#cbd5e1' }}>·</span>
+                  <Clock size={11} color="#94a3b8" />
+                  <span style={{ fontSize: 11, color: '#d97706', fontWeight: 500 }}>{ticket.estimated_wait > 0 ? `~${ticket.estimated_wait}m` : '<5m'}</span>
                 </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-slate-600 mb-2 block">Transfer to Department *</label>
-                  <select
-                    value={transferDepartment}
-                    onChange={(e) => setTransferDepartment(e.target.value)}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">Select department</option>
-                    {services.map((service) => (
-                      <option key={service.id} value={service.name}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-2 block">Staff Notes *</label>
-                  <textarea
-                    value={transferNotes}
-                    onChange={(e) => setTransferNotes(e.target.value)}
-                    placeholder="Provide context for the next staff member..."
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 resize-none"
-                    required
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    onClick={handleTransfer}
-                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
-                  >
-                    <ArrowRightLeft className="w-5 h-5" />
-                    Transfer
-                  </button>
-                  <button
-                    onClick={() => setShowTransferModal(false)}
-                    className="px-6 py-3 border-2 border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
+                {!!ticket.notes && (
+                  <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 600, backgroundColor: '#f5f3ff', alignSelf: 'flex-start', padding: '2px 7px', borderRadius: 6 }}>{ticket.notes}</span>
+                )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* Manual Entry Modal */}
-      {showManualEntry && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="bg-teal-100 rounded-lg p-3">
-                    <UserPlus className="w-6 h-6 text-teal-600" />
-                  </div>
-                  <h2 className="text-2xl text-slate-800">Walk-In Customer</h2>
-                </div>
-                <button
-                  onClick={() => setShowManualEntry(false)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-
-              <form onSubmit={handleManualEntry} className="space-y-4">
-                <div>
-                  <label className="text-sm text-slate-600 mb-2 block">Customer Name *</label>
-                  <input
-                    type="text"
-                    value={manualEntryForm.customerName}
-                    onChange={(e) => setManualEntryForm({ ...manualEntryForm, customerName: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    placeholder="Enter name"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-slate-600 mb-2 block">Service *</label>
-                  <select
-                    value={manualEntryForm.service}
-                    onChange={(e) => setManualEntryForm({ ...manualEntryForm, service: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500"
-                    required
-                  >
-                    <option value="">Select service</option>
-                    {services.map((service) => (
-                      <option key={service.id} value={service.name}>
-                        {service.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm text-amber-800">
-                      <p>This ticket will be added to your counter's queue for customers without mobile access.</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="submit"
-                    className="flex-1 py-3 bg-teal-600 text-white rounded-xl hover:bg-teal-700 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Plus className="w-5 h-5" />
-                    Add to Queue
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowManualEntry(false)}
-                    className="px-6 py-3 border-2 border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-all"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center' }}>
+              <button
+                onClick={() => handleCall(ticket)}
+                disabled={!active || !!serving || calling !== null}
+                style={{
+                  display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4,
+                  backgroundColor: !active || !!serving || calling !== null ? '#f1f5f9' : '#eff6ff',
+                  borderRadius: 10, padding: '8px 12px',
+                  border: `1px solid ${!active || !!serving || calling !== null ? '#e2e8f0' : '#bfdbfe'}`,
+                  cursor: !active || !!serving || calling !== null ? 'not-allowed' : 'pointer',
+                }}
+              >
+                <Play size={14} color={!active || !!serving || calling !== null ? '#94a3b8' : '#2563eb'} />
+                <span style={{ fontSize: 12, fontWeight: 800, color: !active || !!serving || calling !== null ? '#94a3b8' : '#2563eb' }}>Call</span>
+              </button>
+              <button
+                onClick={() => handleCancel(ticket)}
+                style={{ width: 34, height: 34, borderRadius: 10, backgroundColor: '#fff1f2', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #fecdd3', cursor: 'pointer' }}
+              >
+                <X size={14} color="#e11d48" />
+              </button>
             </div>
           </div>
-        </div>
+        ))
       )}
 
-      {/* Customer Quick View Modal */}
-      {selectedCustomer && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="bg-slate-100 rounded-lg p-3">
-                    <User className="w-6 h-6 text-slate-600" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-2xl text-slate-800">{selectedCustomer.customerName}</h2>
-                      {selectedCustomer.isReturningCustomer && (
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 text-xs rounded-full font-semibold">
-                          Returning Customer
-                        </span>
-                      )}
-                      {selectedCustomer.transferInfo && (
-                        <span className="px-3 py-1 bg-purple-100 text-purple-700 text-xs rounded-full font-semibold">
-                          Transferred
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-slate-600">{selectedCustomer.ticketNumber}</p>
-                    {selectedCustomer.isReturningCustomer && selectedCustomer.previousVisits && (
-                      <p className="text-xs text-blue-600 mt-1">
-                        Previous visits: {selectedCustomer.previousVisits}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setSelectedCustomer(null);
-                    setCustomerViewTab('details');
-                  }}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+      {/* Footer */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, marginTop: 6 }}>
+        <RefreshCw size={12} color="#94a3b8" />
+        <span style={{ fontSize: 10, color: '#cbd5e1', fontWeight: 500, textAlign: 'center' }}>Auto-refreshes every 10 seconds · Pull to refresh</span>
+      </div>
 
-              {/* Transfer Info Alert */}
-              {selectedCustomer.transferInfo && (
-                <div className="mb-6 bg-purple-50 border border-purple-200 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <ArrowRightLeft className="w-5 h-5 text-purple-600 mt-0.5" />
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-purple-800 mb-1">Transferred from Counter {selectedCustomer.transferInfo.fromCounter}</h3>
-                      <p className="text-sm text-purple-700 mb-2">
-                        <span className="font-semibold">Department:</span> {selectedCustomer.transferInfo.fromDepartment}
-                      </p>
-                      <p className="text-sm text-purple-700 mb-2">
-                        <span className="font-semibold">Reason:</span> {selectedCustomer.transferInfo.reason}
-                      </p>
-                      <p className="text-xs text-purple-600">
-                        Transferred by {selectedCustomer.transferInfo.transferredBy} at{' '}
-                        {new Date(selectedCustomer.transferInfo.transferredAt).toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tabs */}
-              <div className="border-b border-slate-200 mb-6">
-                <div className="flex gap-4">
-                  <button
-                    onClick={() => setCustomerViewTab('details')}
-                    className={`pb-3 px-2 border-b-2 transition-colors ${
-                      customerViewTab === 'details'
-                        ? 'border-blue-600 text-blue-600 font-semibold'
-                        : 'border-transparent text-slate-600 hover:text-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      Details
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setCustomerViewTab('history')}
-                    className={`pb-3 px-2 border-b-2 transition-colors ${
-                      customerViewTab === 'history'
-                        ? 'border-blue-600 text-blue-600 font-semibold'
-                        : 'border-transparent text-slate-600 hover:text-slate-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <History className="w-4 h-4" />
-                      History & Notes
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Tab Content */}
-              {customerViewTab === 'details' ? (
-                <>
-                  <div className="grid md:grid-cols-2 gap-4 mb-6">
-                    <div className="bg-slate-50 rounded-xl p-4">
-                      <div className="text-sm text-slate-600 mb-1">Service</div>
-                      <div className="text-lg text-slate-800 font-semibold">{selectedCustomer.service}</div>
-                    </div>
-                    <div className="bg-orange-50 rounded-xl p-4">
-                      <div className="text-sm text-orange-600 mb-1">Total Wait Duration</div>
-                      <div className="text-lg text-orange-800 font-semibold">{selectedCustomer.totalWaitMins} minutes</div>
-                    </div>
-                    <div className="bg-blue-50 rounded-xl p-4">
-                      <div className="text-sm text-blue-600 mb-1">Origin</div>
-                      <div className="flex items-center gap-2 text-lg text-blue-800 font-semibold">
-                        {getOriginIcon(selectedCustomer.origin)}
-                        {selectedCustomer.origin}
-                      </div>
-                    </div>
-                    <div className="bg-green-50 rounded-xl p-4">
-                      <div className="text-sm text-green-600 mb-1">Joined At</div>
-                      <div className="text-lg text-green-800 font-semibold">
-                        {new Date(selectedCustomer.joinedAt).toLocaleTimeString('en-US', {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        handleRecall(selectedCustomer);
-                        setSelectedCustomer(null);
-                      }}
-                      className="flex-1 py-3 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      <RefreshCw className="w-5 h-5" />
-                      Recall Customer
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleNoShow(selectedCustomer);
-                        setSelectedCustomer(null);
-                      }}
-                      className="flex-1 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all flex items-center justify-center gap-2"
-                    >
-                      <UserX className="w-5 h-5" />
-                      Mark No-Show
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  {/* History & Notes Tab */}
-                  <div className="space-y-4">
-                    {/* Visit History */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                        <History className="w-5 h-5 text-blue-600" />
-                        Previous Visits
-                      </h3>
-                      {selectedCustomer.history && selectedCustomer.history.length > 0 ? (
-                        <div className="space-y-3">
-                          {selectedCustomer.history.map((visit, index) => (
-                            <div key={index} className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                              <div className="flex items-start justify-between mb-2">
-                                <div>
-                                  <div className="font-semibold text-slate-800">{visit.service}</div>
-                                  <div className="text-sm text-slate-600">
-                                    {new Date(visit.visitDate).toLocaleDateString('en-US', {
-                                      year: 'numeric',
-                                      month: 'long',
-                                      day: 'numeric'
-                                    })}
-                                  </div>
-                                </div>
-                                <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                                  visit.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {visit.status}
-                                </span>
-                              </div>
-                              {visit.notes && (
-                                <div className="text-sm text-slate-700 bg-white rounded-lg p-3 mt-2">
-                                  <span className="font-semibold">Notes:</span> {visit.notes}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="bg-slate-50 rounded-xl p-6 text-center">
-                          <History className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                          <p className="text-sm text-slate-600">No previous visit history found</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Staff Notes */}
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-800 mb-3 flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-teal-600" />
-                        Staff Notes
-                      </h3>
-                      <textarea
-                        value={customerNotes}
-                        onChange={(e) => setCustomerNotes(e.target.value)}
-                        placeholder="Add notes about this customer's visit..."
-                        className="w-full h-32 px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                      />
-                      <button
-                        onClick={() => {
-                          if (customerNotes.trim()) {
-                            alert('Notes saved successfully!');
-                            setCustomerNotes('');
-                          }
-                        }}
-                        className="mt-2 px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-all"
-                      >
-                        Save Notes
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } .sqms-spinner { animation: spin 0.8s linear infinite; }`}</style>
     </div>
   );
 }

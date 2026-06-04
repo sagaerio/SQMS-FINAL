@@ -1,322 +1,304 @@
 import { useNavigate } from 'react-router';
-import {
-  LayoutDashboard,
-  Ticket,
-  Bell,
-  MapPin,
-  Calendar,
-  BarChart3,
-  ArrowRight,
-  Settings,
-  Users,
-  Clock,
-  CheckCircle,
-  QrCode,
-  Smartphone,
-  Briefcase
-} from 'lucide-react';
-import { useState, useEffect } from 'react';
-import { useIndustry } from '../contexts/IndustryContext';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { ServiceSelection } from '../components/ServiceSelection';
-import type { Service } from '../components/ServiceSelection';
+import {
+  ListOrdered,
+  Calendar,
+  BellDot,
+  HeadphonesIcon,
+  History,
+  CheckCircle2,
+  Clock,
+  MapPin,
+  RefreshCw,
+  ChevronRight,
+  Building,
+} from 'lucide-react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
+
+function greeting(name: string): string {
+  const h = new Date().getHours();
+  const part = h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  return `Good ${part}, ${name.split(' ')[0]}`;
+}
+
+function formatDate(dateStr: string): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function formatTime(t: string): string {
+  const [h, m] = t.split(':').map(Number);
+  const ap = h >= 12 ? 'PM' : 'AM';
+  const hr = h > 12 ? h - 12 : h === 0 ? 12 : h;
+  return `${hr}:${String(m).padStart(2, '0')} ${ap}`;
+}
+
+type ActiveTicket = {
+  id: number;
+  ticket_number: string;
+  service_name: string;
+  branch_name: string;
+  status: 'waiting' | 'called' | 'serving' | 'completed';
+  position: number;
+  estimated_wait: number;
+};
+
+type Appointment = {
+  id: number;
+  ticket_number: string;
+  service_name: string;
+  branch_name: string;
+  appointment_date: string;
+  appointment_time: string;
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled';
+};
+
+const QUICK_ACTIONS = [
+  { label: 'Join Queue',        icon: ListOrdered,    color: '#2563eb', bg: '#eff6ff', route: '/services'      },
+  { label: 'Book Appointment',  icon: Calendar,       color: '#059669', bg: '#f0fdf4', route: '/appointments'  },
+  { label: 'Queue Status',      icon: BellDot,        color: '#7c3aed', bg: '#f5f3ff', route: '/status'        },
+  { label: 'Register Business', icon: Building,       color: '#0891b2', bg: '#ecfeff', route: '/businesses'    },
+  { label: 'Support',           icon: HeadphonesIcon, color: '#d97706', bg: '#fffbeb', route: '/support'       },
+];
 
 export function Dashboard() {
   const navigate = useNavigate();
-  const { user, loading } = useAuth();
-  const [showServiceSelection, setShowServiceSelection] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const { industry } = useIndustry();
-  const [isCustomerMode, setIsCustomerMode] = useState(false);
+  const { user, loading: authLoading } = useAuth();
+  const [activeTicket, setActiveTicket] = useState<ActiveTicket | null>(null);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    // Wait for auth to finish loading
-    if (loading) return;
-
-    // Redirect to login if not authenticated
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-
-    // Check customer mode
-    const customerMode = localStorage.getItem('sqms_customer_mode') === 'true';
-    setIsCustomerMode(customerMode);
-
-    // Load saved service if exists (but don't show selection modal on login)
-    if (user.role === 'customer' || customerMode) {
-      const savedService = localStorage.getItem('sqms_selected_service');
-      if (savedService) {
-        setSelectedService(JSON.parse(savedService));
-      }
-    }
-  }, [user, loading, navigate]);
-
-  // Determine if user should see customer view
+  const isCustomerMode = typeof window !== 'undefined' && localStorage.getItem('sqms_customer_mode') === 'true';
   const showCustomerView = user?.role === 'customer' || isCustomerMode;
 
-  const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    localStorage.setItem('sqms_selected_service', JSON.stringify(service));
-    setShowServiceSelection(false);
-  };
-
-  const menuItems = [
-    {
-      id: 'admin-panel',
-      title: 'Admin Panel',
-      description: 'Manage services, branches, and queue rules',
-      icon: Settings,
-      path: '/admin',
-      color: 'from-purple-500 to-purple-600',
-      stats: 'Full control',
-      roles: ['admin']
-    },
-    {
-      id: 'staff-counter',
-      title: 'My Counter',
-      description: 'Manage your assigned counter and serve customers',
-      icon: Users,
-      path: '/staff',
-      color: 'from-orange-500 to-orange-600',
-      stats: 'Active counter',
-      roles: ['staff']
-    },
-    {
-      id: 'dashboard',
-      title: 'Dashboard',
-      description: 'Overview of your queue management system',
-      icon: LayoutDashboard,
-      path: '/dashboard',
-      color: 'from-blue-500 to-blue-600',
-      stats: 'Real-time insights',
-      roles: ['admin', 'staff', 'customer']
-    },
-    {
-      id: 'queue-status',
-      title: 'Queue Status',
-      description: 'Monitor real-time queue status and notifications',
-      icon: Bell,
-      path: '/status',
-      color: 'from-green-500 to-green-600',
-      stats: 'Live updates',
-      roles: ['admin', 'staff', 'customer']
-    },
-    {
-      id: 'multi-branch',
-      title: 'Multi-Branch',
-      description: 'Manage multiple locations and branches',
-      icon: MapPin,
-      path: '/branches',
-      color: 'from-blue-500 to-blue-600',
-      stats: 'All locations',
-      roles: ['admin', 'customer']
-    },
-    {
-      id: 'appointments',
-      title: 'Appointments',
-      description: 'Schedule and manage customer appointments',
-      icon: Calendar,
-      path: '/appointments',
-      color: 'from-teal-500 to-teal-600',
-      stats: 'Book services',
-      roles: ['admin', 'staff', 'customer']
-    },
-    {
-      id: 'analytics',
-      title: 'Analytics',
-      description: 'View reports and performance metrics',
-      icon: BarChart3,
-      path: '/analytics',
-      color: 'from-blue-600 to-teal-600',
-      stats: 'Data insights',
-      roles: ['admin']
+  useEffect(() => {
+    if (authLoading || !user) return;
+    if (!showCustomerView) {
+      if (user.role === 'staff') { navigate('/staff'); return; }
+      if (user.role === 'admin' || user.role === 'superadmin') { navigate('/admin'); return; }
     }
-  ];
+  }, [user, authLoading]);
 
-  // Customer-specific features
-  const customerFeatures = [
-    {
-      id: 'skip-wait',
-      title: 'Skip the Wait',
-      description: 'Join virtual queues from anywhere and get real-time updates on your position',
-      icon: Clock,
-      color: 'from-blue-500 to-blue-600'
-    },
-    {
-      id: 'easy-booking',
-      title: 'Easy Appointment Booking',
-      description: 'Schedule appointments at your convenience without calling or visiting in person',
-      icon: Calendar,
-      color: 'from-teal-500 to-teal-600'
-    },
-    {
-      id: 'qr-access',
-      title: 'QR Code Access',
-      description: 'Simply scan a QR code at the location to join the queue instantly',
-      icon: QrCode,
-      color: 'from-blue-600 to-teal-600'
-    },
-    {
-      id: 'notifications',
-      title: 'Live Notifications',
-      description: 'Get notified when it\'s your turn so you can use your time productively',
-      icon: Bell,
-      color: 'from-slate-500 to-slate-600'
-    },
-    {
-      id: 'multi-branch',
-      title: 'Multiple Locations',
-      description: 'Access services across all branches and choose the most convenient one',
-      icon: MapPin,
-      color: 'from-blue-500 to-teal-500'
-    },
-    {
-      id: 'track-status',
-      title: 'Track Your Status',
-      description: 'Monitor your queue position and estimated wait time in real-time',
-      icon: CheckCircle,
-      color: 'from-teal-600 to-blue-600'
+  const loadData = useCallback(async () => {
+    try {
+      const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+      const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
+      const [ticketRes, apptRes] = await Promise.all([
+        fetch(`${SERVER}/queues/my-ticket`, { headers }).catch(() => null),
+        fetch(`${SERVER}/appointments`, { headers }).catch(() => null),
+      ]);
+      if (ticketRes?.ok) {
+        const t = await ticketRes.json().catch(() => null);
+        const isVisible = t && ['waiting', 'called', 'serving', 'completed'].includes(t.status);
+        setActiveTicket(isVisible ? t : null);
+      }
+      if (apptRes?.ok) {
+        const raw = await apptRes.json().catch(() => []);
+        setAppointments(Array.isArray(raw) ? raw : raw?.results ?? []);
+      }
+    } catch {
+      setActiveTicket(null);
+      setAppointments([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  ];
+  }, []);
 
-  const IndustryIcon = industry?.icon;
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(loadData, 15000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const totalAppts = appointments.length;
+  const completedAppts = appointments.filter(a => a.status === 'completed').length;
+  const upcomingAppts = appointments.filter(a => a.status === 'scheduled' || a.status === 'confirmed').length;
+  const nextAppt = appointments
+    .filter(a => a.status === 'scheduled' || a.status === 'confirmed')
+    .sort((a, b) => new Date(`${a.appointment_date}T${a.appointment_time}`).getTime() - new Date(`${b.appointment_date}T${b.appointment_time}`).getTime())[0] ?? null;
+
+  if (!showCustomerView && !authLoading) return null;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl text-slate-800 mb-3">
-            {showCustomerView ? `Welcome, ${user?.full_name}` : 'Dashboard'}
-          </h1>
-          <p className="text-xl text-slate-600">
-            {showCustomerView
-              ? 'Your time is valuable. We help you skip the wait.'
-              : 'Smart Queue Management System'}
+    <div style={{ padding: 16, paddingBottom: 32, display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Greeting */}
+      <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, paddingBottom: 4 }}>
+        <div>
+          <p style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', letterSpacing: -0.3, margin: 0 }}>
+            {greeting(user?.full_name ?? 'there')}
+          </p>
+          <p style={{ fontSize: 13, color: '#64748b', fontWeight: 500, marginTop: 2, margin: '2px 0 0' }}>
+            Here's your queue overview
           </p>
         </div>
-
-        {/* Customer Features or Menu Grid */}
-        {showCustomerView ? (
-          <>
-            {/* Customer Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <button
-                onClick={() => navigate('/services')}
-                className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 text-white hover:shadow-2xl hover:scale-105 transition-all"
-              >
-                <Ticket className="w-10 h-10 mb-4" />
-                <h3 className="text-xl mb-2">Join Virtual Queue</h3>
-                <p className="text-white/90 text-sm">Get your ticket now</p>
-              </button>
-
-              <button
-                onClick={() => navigate('/appointments')}
-                className="bg-gradient-to-r from-teal-600 to-teal-700 rounded-2xl p-6 text-white hover:shadow-2xl hover:scale-105 transition-all"
-              >
-                <Calendar className="w-10 h-10 mb-4" />
-                <h3 className="text-xl mb-2">Book Appointment</h3>
-                <p className="text-white/90 text-sm">Schedule a service</p>
-              </button>
-
-              <button
-                onClick={() => navigate('/status')}
-                className="bg-gradient-to-r from-slate-600 to-slate-700 rounded-2xl p-6 text-white hover:shadow-2xl hover:scale-105 transition-all"
-              >
-                <Bell className="w-10 h-10 mb-4" />
-                <h3 className="text-xl mb-2">Queue Status</h3>
-                <p className="text-white/90 text-sm">Check your position</p>
-              </button>
-            </div>
-
-            {/* Why SQMS Section */}
-            <div className="mb-8">
-              <h2 className="text-3xl text-slate-800 mb-6">Why Use SQMS?</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {customerFeatures.map((feature) => {
-                  const Icon = feature.icon;
-                  return (
-                    <div
-                      key={feature.id}
-                      className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200"
-                    >
-                      <div className={`bg-gradient-to-r ${feature.color} rounded-xl p-3 w-14 h-14 flex items-center justify-center mb-4`}>
-                        <Icon className="w-7 h-7 text-white" />
-                      </div>
-
-                      <h3 className="text-xl text-slate-800 mb-2">
-                        {feature.title}
-                      </h3>
-
-                      <p className="text-slate-600 text-sm leading-relaxed">
-                        {feature.description}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {menuItems.filter(item => {
-              if (!item.roles) return true;
-              return user?.role && item.roles.includes(user.role);
-            }).map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => navigate(item.path)}
-                  className="bg-white rounded-3xl shadow-xl p-8 border border-slate-200 hover:shadow-2xl hover:scale-105 transition-all duration-300 text-left group"
-                >
-                  <div className={`bg-gradient-to-r ${item.color} rounded-2xl p-4 w-16 h-16 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
-                    <Icon className="w-8 h-8 text-white" />
-                  </div>
-
-                  <h3 className="text-2xl text-slate-800 mb-2 group-hover:text-blue-600 transition-colors">
-                    {item.title}
-                  </h3>
-
-                  <p className="text-slate-600 mb-4">
-                    {item.description}
-                  </p>
-
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-500">{item.stats}</span>
-                    <ArrowRight className="w-5 h-5 text-blue-600 group-hover:translate-x-2 transition-transform" />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Help Section */}
-        <div className="mt-12 bg-gradient-to-r from-blue-600 to-blue-700 rounded-3xl p-8 text-white text-center">
-          <h3 className="text-2xl mb-3">Need Help?</h3>
-          <p className="text-white/90 mb-6">
-            Our support team is here to assist you with any questions
-          </p>
-          <button
-            onClick={() => navigate('/support')}
-            className="bg-white text-blue-600 px-8 py-3 rounded-xl hover:bg-blue-50 transition-all"
-          >
-            Contact Support
-          </button>
-        </div>
+        <button
+          onClick={() => { setRefreshing(true); loadData(); }}
+          disabled={refreshing}
+          style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', cursor: 'pointer' }}
+        >
+          <RefreshCw size={18} color="#64748b" />
+        </button>
       </div>
 
-      {/* Service Selection Modal */}
-      {showServiceSelection && industry && (
-        <ServiceSelection
-          industryId={industry.id}
-          onSelect={handleServiceSelect}
-          onClose={() => setShowServiceSelection(false)}
-          showClose={!!selectedService}
-        />
+      {/* Stats row */}
+      <div style={{ display: 'flex', flexDirection: 'row', gap: 10 }}>
+        {[
+          { label: 'Total',     value: totalAppts,     color: '#2563eb' },
+          { label: 'Upcoming',  value: upcomingAppts,  color: '#059669' },
+          { label: 'Completed', value: completedAppts, color: '#7c3aed' },
+        ].map(stat => (
+          <div key={stat.label} style={{ flex: 1, backgroundColor: '#fff', borderRadius: 16, padding: 14, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(15,23,42,0.04)' }}>
+            <span style={{ fontSize: 22, fontWeight: 900, color: stat.color }}>{loading ? '–' : stat.value}</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>{stat.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Active Queue */}
+      <p style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '4px 0 0' }}>Active Queue</p>
+      {loading ? (
+        <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 72 }}>
+          <div className="sqms-spinner" style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #2563eb', borderTopColor: 'transparent' }} />
+        </div>
+      ) : activeTicket ? (
+        activeTicket.status === 'completed' ? (
+          <div style={{ backgroundColor: '#f0fdf4', borderRadius: 20, padding: 18, border: '2px solid #6ee7b7', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <CheckCircle2 size={22} color="#059669" />
+              <span style={{ fontSize: 12, fontWeight: 900, color: '#059669', letterSpacing: 1, flex: 1 }}>COMPLETED</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#065f46', fontFamily: 'monospace' }}>{activeTicket.ticket_number}</span>
+            </div>
+            <p style={{ fontSize: 20, fontWeight: 900, color: '#065f46', margin: 0 }}>{activeTicket.service_name}</p>
+            <p style={{ fontSize: 13, color: '#059669', fontWeight: 500, margin: 0 }}>{activeTicket.branch_name}</p>
+            <p style={{ fontSize: 12, color: '#047857', fontWeight: 500, margin: '4px 0 0' }}>Your service has been completed. Thank you!</p>
+          </div>
+        ) : (
+          <button onClick={() => navigate('/status')} style={{ backgroundColor: '#1e40af', borderRadius: 20, padding: 18, boxShadow: '0 4px 16px rgba(30,64,175,0.3)', width: '100%', border: 'none', cursor: 'pointer', textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(255,255,255,0.15)', paddingLeft: 10, paddingRight: 10, paddingTop: 4, paddingBottom: 4, borderRadius: 999 }}>
+                <div style={{ width: 7, height: 7, borderRadius: 999, backgroundColor: activeTicket.status === 'serving' ? '#059669' : activeTicket.status === 'called' ? '#d97706' : '#60a5fa' }} />
+                <span style={{ fontSize: 11, fontWeight: 800, color: activeTicket.status === 'serving' ? '#6ee7b7' : activeTicket.status === 'called' ? '#fcd34d' : '#93c5fd' }}>
+                  {activeTicket.status === 'serving' ? 'Now Serving' : activeTicket.status === 'called' ? "You've Been Called!" : 'In Queue'}
+                </span>
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 800, color: 'rgba(255,255,255,0.6)', fontFamily: 'monospace' }}>{activeTicket.ticket_number}</span>
+            </div>
+            <p style={{ fontSize: 20, fontWeight: 900, color: '#fff', margin: 0 }}>{activeTicket.service_name}</p>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontWeight: 500, margin: '0 0 4px' }}>{activeTicket.branch_name}</p>
+            <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <ListOrdered size={16} color="#93c5fd" />
+                <div>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', margin: 0 }}>{activeTicket.status === 'serving' ? '—' : `#${activeTicket.position}`}</p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: 600, textTransform: 'uppercase', margin: 0 }}>Position</p>
+                </div>
+              </div>
+              <div style={{ width: 1, height: 32, backgroundColor: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Clock size={16} color="#93c5fd" />
+                <div>
+                  <p style={{ fontSize: 15, fontWeight: 800, color: '#fff', margin: 0 }}>
+                    {activeTicket.status === 'serving' ? 'Your turn' : activeTicket.estimated_wait > 0 ? `~${activeTicket.estimated_wait} min` : '< 5 min'}
+                  </p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', fontWeight: 600, textTransform: 'uppercase', margin: 0 }}>Est. wait</p>
+                </div>
+              </div>
+            </div>
+          </button>
+        )
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', minHeight: 72 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#eff6ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <ListOrdered size={26} color="#2563eb" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>No Active Queue</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, margin: '2px 0 0' }}>You're not in any queue right now</p>
+          </div>
+          <button onClick={() => navigate('/services')} style={{ backgroundColor: '#2563eb', borderRadius: 10, padding: '8px 14px', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Join</span>
+          </button>
+        </div>
       )}
+
+      {/* Next Appointment */}
+      <p style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '4px 0 0' }}>Next Appointment</p>
+      {nextAppt ? (
+        <div style={{ backgroundColor: '#fff', borderRadius: 20, padding: 18, border: '1px solid #e2e8f0', boxShadow: '0 2px 8px rgba(15,23,42,0.04)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 }}>Next Appointment</span>
+            <button onClick={() => navigate('/appointments')} style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb' }}>View all</span>
+            </button>
+          </div>
+          <p style={{ fontSize: 18, fontWeight: 900, color: '#0f172a', margin: '2px 0 0' }}>{nextAppt.service_name}</p>
+          <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 }}>
+            {[
+              { Icon: Calendar, text: formatDate(nextAppt.appointment_date) },
+              { Icon: Clock,    text: formatTime(nextAppt.appointment_time) },
+              { Icon: MapPin,   text: nextAppt.branch_name },
+            ].map(({ Icon, text }) => (
+              <div key={text} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Icon size={14} color="#64748b" />
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>{text}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ alignSelf: 'flex-start', padding: '4px 10px', borderRadius: 999, marginTop: 4, backgroundColor: nextAppt.status === 'confirmed' ? '#f0fdf4' : '#eff6ff' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: nextAppt.status === 'confirmed' ? '#059669' : '#2563eb' }}>
+              {nextAppt.status === 'confirmed' ? 'Confirmed' : 'Scheduled'}
+            </span>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 16, padding: 16, border: '1px solid #e2e8f0', minHeight: 72 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#f0fdf4', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Calendar size={26} color="#059669" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', margin: 0 }}>No Upcoming Appointments</p>
+            <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, margin: '2px 0 0' }}>Schedule one when you're ready</p>
+          </div>
+          <button onClick={() => navigate('/appointments')} style={{ backgroundColor: '#059669', borderRadius: 10, padding: '8px 14px', border: 'none', cursor: 'pointer' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Book</span>
+          </button>
+        </div>
+      )}
+
+      {/* Ticket History */}
+      <button onClick={() => navigate('/status')} style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: '#fff', borderRadius: 18, padding: 16, border: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(15,23,42,0.04)', width: '100%', cursor: 'pointer', textAlign: 'left' }}>
+        <div style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <History size={22} color="#7c3aed" />
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: 0 }}>Ticket History</p>
+          <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 500, margin: '2px 0 0' }}>View all your past tickets</p>
+        </div>
+        <ChevronRight size={22} color="#cbd5e1" />
+      </button>
+
+      {/* Quick Actions */}
+      <p style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '4px 0 0' }}>Quick Actions</p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        {QUICK_ACTIONS.map(action => {
+          const Icon = action.icon;
+          return (
+            <button key={action.label} onClick={() => navigate(action.route)} style={{ backgroundColor: '#fff', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, border: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(15,23,42,0.04)', cursor: 'pointer' }}>
+              <div style={{ width: 52, height: 52, borderRadius: 16, backgroundColor: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Icon size={22} color={action.color} />
+              </div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', textAlign: 'center' }}>{action.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } } .sqms-spinner { animation: spin 0.8s linear infinite; }`}</style>
     </div>
   );
 }

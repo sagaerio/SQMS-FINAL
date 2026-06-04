@@ -21,6 +21,7 @@ import { EmployeeManagement } from "./pages/EmployeeManagement";
 import { BusinessManagement } from "./pages/BusinessManagement";
 import { BusinessRequests } from "./pages/BusinessRequests";
 import { ErrorBoundary as ErrorBoundaryPage } from "./pages/ErrorBoundary";
+import { Notifications } from "./pages/Notifications";
 
 export const router = createBrowserRouter([
   // Public routes (no navigation)
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
       { path: "dashboard", Component: Dashboard },
       { path: "admin", Component: AdminDashboard },
       { path: "staff", Component: StaffDashboard },
+      { path: "notifications", Component: Notifications },
       { path: "profile", Component: Profile },
       { path: "status", Component: QueueStatus },
       { path: "services", Component: Services },
