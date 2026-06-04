@@ -228,64 +228,68 @@ export function Services() {
   // Show queue confirmation
   if (step === 'confirmation' && queueTicket) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-        <div className="max-w-2xl mx-auto">
-          <div className="bg-white rounded-3xl shadow-2xl p-12 text-center border border-blue-200">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <CheckCircle className="w-12 h-12 text-green-600" />
+      <div style={{ maxWidth: 680, margin: '0 auto' }}>
+        <div style={{ backgroundColor: '#fff', borderRadius: 20, boxShadow: '0 4px 24px rgba(0,0,0,0.08)', padding: '48px', textAlign: 'center', border: '1px solid #bfdbfe' }}>
+          <div style={{ width: 72, height: 72, backgroundColor: '#f0fdf4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
+            <CheckCircle style={{ width: 40, height: 40, color: '#059669' }} />
+          </div>
+          <h2 style={{ fontSize: 28, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>You're in the Queue!</h2>
+          <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 32px' }}>Your virtual queue ticket has been created successfully</p>
+
+          <div style={{ backgroundColor: '#1e40af', borderRadius: 16, padding: '32px', marginBottom: 24 }}>
+            <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', margin: '0 0 16px', fontWeight: 500 }}>YOUR TICKET NUMBER</p>
+            <div style={{ backgroundColor: '#fff', padding: 20, borderRadius: 12, display: 'inline-block', marginBottom: 16 }}>
+              <QRCodeSVG
+                id="qr-code-svg"
+                value={`TICKET-${queueTicket.ticket_number || ''}`}
+                size={140}
+                level="H"
+                includeMargin={true}
+              />
             </div>
-            <h2 className="text-3xl mb-4 text-slate-800">You're in the Queue!</h2>
-            <div className="bg-blue-600 text-white rounded-2xl p-8 mb-6">
-              <p className="text-sm opacity-90 mb-2">Your Ticket Number</p>
-              <div className="bg-white p-6 rounded-xl mb-4 inline-block">
-                <QRCodeSVG
-                  id="qr-code-svg"
-                  value={`TICKET-${queueTicket.ticket_number || ''}`}
-                  size={160}
-                  level="H"
-                  includeMargin={true}
-                />
-              </div>
-              <p className="text-6xl mb-2">{queueTicket.ticket_number}</p>
-              <p className="text-lg opacity-90 mb-4">Please wait for your turn</p>
-              <button
-                onClick={downloadQRCode}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-all"
-              >
-                <Download className="w-4 h-4" />
-                Download QR Code
-              </button>
+            <p style={{ fontSize: 56, fontWeight: 900, color: '#fff', margin: '0 0 8px', letterSpacing: '-1px' }}>{queueTicket.ticket_number}</p>
+            <p style={{ fontSize: 14, color: 'rgba(255,255,255,0.8)', margin: '0 0 20px' }}>Please wait for your turn</p>
+            <button
+              onClick={downloadQRCode}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', backgroundColor: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13 }}
+            >
+              <Download style={{ width: 15, height: 15 }} />
+              Download QR Code
+            </button>
+          </div>
+
+          <div style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: '20px 24px', marginBottom: 28, textAlign: 'left', border: '1px solid #e2e8f0' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: '#475569', margin: '0 0 12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Queue Details</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 24px' }}>
+              {[
+                ['Industry', selectedIndustry?.name],
+                ['Service', selectedService?.name],
+                ['Branch', branches.find(b => b.id === selectedBranch)?.name || 'Selected Branch'],
+                ['Position', `#${queueTicket.position}`],
+                ['Est. Wait', `${queueTicket.estimated_wait_time} min`],
+                ['Status', queueTicket.status],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '8px 0', borderBottom: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, textTransform: 'uppercase' }}>{label}</span>
+                  <span style={{ fontSize: 14, color: '#0f172a', fontWeight: 600 }}>{value}</span>
+                </div>
+              ))}
             </div>
-            <div className="bg-blue-50 rounded-xl p-6 mb-6 text-left">
-              <h3 className="font-semibold text-slate-800 mb-4">Queue Details:</h3>
-              <div className="space-y-2 text-sm text-slate-600">
-                <p><strong>Industry:</strong> {selectedIndustry?.name}</p>
-                <p><strong>Service:</strong> {selectedService?.name}</p>
-                <p><strong>Branch:</strong> {branches.find(b => b.id === selectedBranch)?.name}</p>
-                <p><strong>Position:</strong> <span className="text-blue-600 font-semibold">#{queueTicket.position}</span></p>
-                <p><strong>Estimated Wait:</strong> <span className="text-orange-600">{queueTicket.estimated_wait_time} min</span></p>
-                <p><strong>Status:</strong> <span className="text-green-600 capitalize">{queueTicket.status}</span></p>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => navigate('/status')}
-                className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                View Queue Status
-              </button>
-              <button
-                onClick={() => {
-                  setStep('industry');
-                  setSelectedIndustry(null);
-                  setSelectedService(null);
-                  setSelectedBranch('');
-                }}
-                className="flex-1 px-6 py-3 border-2 border-blue-600 text-blue-600 rounded-xl hover:bg-blue-50 transition-all"
-              >
-                Join Another Queue
-              </button>
-            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={() => navigate('/status')}
+              style={{ flex: 1, padding: '14px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+            >
+              View Queue Status
+            </button>
+            <button
+              onClick={() => { setStep('industry'); setSelectedIndustry(null); setSelectedService(null); setSelectedBranch(''); }}
+              style={{ flex: 1, padding: '14px', backgroundColor: '#fff', color: '#2563eb', border: '2px solid #2563eb', borderRadius: 12, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+            >
+              Join Another Queue
+            </button>
           </div>
         </div>
       </div>
@@ -295,38 +299,38 @@ export function Services() {
   // Step 1: Industry Selection
   if (step === 'industry') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Dashboard</span>
-            </button>
-            <h1 className="text-4xl text-slate-800 mb-2">Choose Your Industry</h1>
-            <p className="text-xl text-slate-600">Select the industry you need service from</p>
-          </div>
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, marginBottom: 12, padding: 0 }}
+          >
+            <ArrowLeft style={{ width: 16, height: 16 }} />
+            Back to Dashboard
+          </button>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>Choose Your Industry</h1>
+          <p style={{ fontSize: 15, color: '#64748b', margin: 0 }}>Select the industry you need service from</p>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {industries.map((industry) => {
-              const Icon = industry.icon;
-              return (
-                <button
-                  key={industry.id}
-                  onClick={() => handleIndustrySelect(industry)}
-                  className="bg-white p-8 rounded-2xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all text-left"
-                >
-                  <div className={`bg-gradient-to-r ${industry.color} rounded-lg p-4 w-16 h-16 flex items-center justify-center mb-4`}>
-                    <Icon className="w-8 h-8 text-white" />
-                  </div>
-                  <h3 className="text-2xl text-slate-800 mb-2">{industry.name}</h3>
-                  <p className="text-slate-600">{industry.description}</p>
-                </button>
-              );
-            })}
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+          {industries.map((industry) => {
+            const Icon = industry.icon;
+            return (
+              <button
+                key={industry.id}
+                onClick={() => handleIndustrySelect(industry)}
+                style={{ backgroundColor: '#fff', padding: '28px 24px', borderRadius: 16, border: '2px solid #e2e8f0', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#93c5fd'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(37,99,235,0.08)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
+              >
+                <div className={`bg-gradient-to-r ${industry.color} rounded-lg p-3 w-14 h-14 flex items-center justify-center mb-4`}>
+                  <Icon style={{ width: 26, height: 26, color: '#fff' }} />
+                </div>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>{industry.name}</h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0, lineHeight: 1.5 }}>{industry.description}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
     );
@@ -337,62 +341,63 @@ export function Services() {
     const IndustryIcon = selectedIndustry.icon;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <button
+            onClick={() => setStep('industry')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, marginBottom: 12, padding: 0 }}
+          >
+            <ArrowLeft style={{ width: 16, height: 16 }} />
+            Back to Industries
+          </button>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>Select a Service</h1>
+          <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 16px' }}>Choose the service you need</p>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+            <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded p-1.5`}>
+              <IndustryIcon style={{ width: 14, height: 14, color: '#fff' }} />
+            </div>
+            <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>{selectedIndustry.name}</span>
+          </div>
+        </div>
+
+        {loadingServices ? (
+          <div style={{ textAlign: 'center', padding: '60px 0' }}>
+            <div style={{ width: 40, height: 40, border: '4px solid #e2e8f0', borderTopColor: '#2563eb', borderRadius: '50%', margin: '0 auto 16px', animation: 'spin 1s linear infinite' }} />
+            <p style={{ color: '#64748b', fontSize: 14 }}>Loading services...</p>
+          </div>
+        ) : services.length === 0 ? (
+          <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: '60px 40px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+            <Briefcase style={{ width: 48, height: 48, color: '#cbd5e1', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>No Services Available</h3>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 20px' }}>There are no services available for this industry at the moment.</p>
             <button
               onClick={() => setStep('industry')}
-              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
+              style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
             >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Industries</span>
+              Choose Different Industry
             </button>
-            <h1 className="text-4xl text-slate-800 mb-2">Select a Service</h1>
-            <p className="text-xl text-slate-600">Choose the service you need</p>
-
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-              <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-lg p-2`}>
-                <IndustryIcon className="w-4 h-4 text-white" />
-              </div>
-              <span className="text-slate-700">{selectedIndustry.name}</span>
-            </div>
           </div>
-
-          {loadingServices ? (
-            <div className="text-center py-12">
-              <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-slate-600">Loading services...</p>
-            </div>
-          ) : services.length === 0 ? (
-            <div className="bg-white rounded-3xl shadow-lg p-12 text-center">
-              <Briefcase className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-2xl text-slate-800 mb-2">No Services Available</h3>
-              <p className="text-slate-600 mb-6">There are no services available for this industry at the moment.</p>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            {services.map((service) => (
               <button
-                onClick={() => setStep('industry')}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
+                key={service.id}
+                onClick={() => handleServiceSelect(service)}
+                style={{ backgroundColor: '#fff', padding: '22px 20px', borderRadius: 14, border: '2px solid #e2e8f0', cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s, box-shadow 0.15s' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = '#93c5fd'; (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 12px rgba(37,99,235,0.08)'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0'; (e.currentTarget as HTMLElement).style.boxShadow = 'none'; }}
               >
-                Choose Different Industry
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>{service.name}</h3>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 8px', lineHeight: 1.5 }}>{service.description}</p>
+                {service.estimated_time && (
+                  <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 600, backgroundColor: '#eff6ff', padding: '3px 8px', borderRadius: 6 }}>
+                    Est. {service.estimated_time} min
+                  </span>
+                )}
               </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {services.map((service) => (
-                <button
-                  key={service.id}
-                  onClick={() => handleServiceSelect(service)}
-                  className="bg-white p-6 rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all text-left"
-                >
-                  <h3 className="text-xl text-slate-800 mb-2">{service.name}</h3>
-                  <p className="text-sm text-slate-600 mb-2">{service.description}</p>
-                  {service.estimated_time && (
-                    <p className="text-xs text-blue-600">Est. time: {service.estimated_time} min</p>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     );
   }
@@ -402,145 +407,142 @@ export function Services() {
     const IndustryIcon = selectedIndustry.icon;
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 px-4 py-12">
-        <div className="max-w-7xl mx-auto">
-          <div className="mb-8">
-            <button
-              onClick={() => setStep('service')}
-              className="flex items-center gap-2 text-slate-600 hover:text-blue-600 mb-4 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span>Back to Services</span>
-            </button>
-
-            <h1 className="text-4xl text-slate-800 mb-2">Select a Branch Location</h1>
-            <p className="text-xl text-slate-600">Choose your preferred branch</p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-sm border border-slate-200">
-                <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-lg p-2`}>
-                  <IndustryIcon className="w-4 h-4 text-white" />
-                </div>
-                <span className="text-slate-700">{selectedIndustry.name}</span>
+      <div>
+        <div style={{ marginBottom: 28 }}>
+          <button
+            onClick={() => setStep('service')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, marginBottom: 12, padding: 0 }}
+          >
+            <ArrowLeft style={{ width: 16, height: 16 }} />
+            Back to Services
+          </button>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', margin: '0 0 6px' }}>Select a Branch Location</h1>
+          <p style={{ fontSize: 15, color: '#64748b', margin: '0 0 16px' }}>Choose your preferred branch</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', backgroundColor: '#fff', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded p-1.5`}>
+                <IndustryIcon style={{ width: 14, height: 14, color: '#fff' }} />
               </div>
-              <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 rounded-lg border border-blue-200">
-                <Ticket className="w-4 h-4 text-blue-600" />
-                <span className="text-slate-700">{selectedService.name}</span>
-              </div>
+              <span style={{ fontSize: 13, color: '#475569', fontWeight: 600 }}>{selectedIndustry.name}</span>
+            </div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 14px', backgroundColor: '#eff6ff', borderRadius: 10, border: '1px solid #bfdbfe' }}>
+              <Ticket style={{ width: 14, height: 14, color: '#2563eb' }} />
+              <span style={{ fontSize: 13, color: '#2563eb', fontWeight: 600 }}>{selectedService.name}</span>
             </div>
           </div>
-
-          {branches.length === 0 ? (
-            <div className="bg-white rounded-3xl shadow-lg p-12 text-center border-2 border-slate-200">
-              <MapPin className="w-16 h-16 text-slate-400 mx-auto mb-4" />
-              <h3 className="text-2xl text-slate-800 mb-2">No Branches Available</h3>
-              <p className="text-slate-600 mb-6">There are no branch locations available for this industry at the moment.</p>
-              <button
-                onClick={() => setStep('service')}
-                className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
-              >
-                Choose Different Service
-              </button>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 gap-6">
-              {branches.map((branch) => {
-                const isSelected = selectedBranch === branch.id;
-                const trafficLevel = Math.floor(Math.random() * 3);
-                const trafficColors = ['text-green-600 bg-green-50', 'text-yellow-600 bg-yellow-50', 'text-red-600 bg-red-50'];
-                const trafficLabels = ['Low Traffic', 'Medium Traffic', 'High Traffic'];
-                const customerCount = [3, 12, 25][trafficLevel];
-                const avgWait = ['5-10 min', '15-25 min', '30-45 min'][trafficLevel];
-                const distance = (Math.random() * 10 + 0.5).toFixed(1);
-
-                return (
-                  <div
-                    key={branch.id}
-                    className={`bg-white rounded-2xl p-6 shadow-lg border-2 transition-all ${
-                      isSelected
-                        ? 'border-blue-600 ring-4 ring-blue-100'
-                        : 'border-slate-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-xl p-3 flex-shrink-0`}>
-                        <MapPin className="w-6 h-6 text-white" />
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="text-xl text-slate-800 mb-2">{branch.name}</h3>
-                        <div className="space-y-1 text-sm text-slate-600">
-                          <p className="flex items-start gap-2">
-                            <MapPin className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                            <span>{branch.address}</span>
-                          </p>
-                          <p className="flex items-center gap-2">
-                            <Phone className="w-4 h-4" />
-                            <span>{branch.phone}</span>
-                          </p>
-                          <p className="flex items-center gap-2">
-                            <Clock className="w-4 h-4" />
-                            <span>{branch.hours}</span>
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      <div className={`${trafficColors[trafficLevel]} rounded-lg p-2 text-center`}>
-                        <Users className="w-4 h-4 mx-auto mb-1" />
-                        <p className="text-xs font-semibold">{trafficLabels[trafficLevel]}</p>
-                        <p className="text-xs opacity-75">{customerCount} customers</p>
-                      </div>
-                      <div className="bg-blue-50 text-blue-600 rounded-lg p-2 text-center">
-                        <Clock className="w-4 h-4 mx-auto mb-1" />
-                        <p className="text-xs font-semibold">Avg Wait</p>
-                        <p className="text-xs opacity-75">{avgWait}</p>
-                      </div>
-                      <div className="bg-purple-50 text-purple-600 rounded-lg p-2 text-center">
-                        <Navigation className="w-4 h-4 mx-auto mb-1" />
-                        <p className="text-xs font-semibold">Distance</p>
-                        <p className="text-xs opacity-75">{distance} km</p>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setSelectedBranch(branch.id)}
-                      disabled={hasActiveTicket}
-                      className={`w-full py-3 rounded-xl font-medium transition-all ${
-                        hasActiveTicket
-                          ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
-                          : isSelected
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                      }`}
-                    >
-                      {hasActiveTicket ? 'Ticket Already Active' : isSelected ? 'Selected' : 'Select Branch'}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {selectedBranch && (
-            <div className="mt-8 bg-white rounded-2xl p-6 shadow-xl border border-blue-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-2xl text-slate-800 mb-2">Ready to Join the Queue?</h3>
-                  <p className="text-slate-600">You'll receive a queue number and real-time updates</p>
-                </div>
-                <button
-                  onClick={handleJoinQueue}
-                  disabled={loading || hasActiveTicket}
-                  className="px-8 py-4 bg-gradient-to-r from-blue-600 to-teal-600 text-white rounded-xl hover:shadow-2xl transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Ticket className="w-6 h-6" />
-                  <span className="text-lg">{loading ? 'Joining Queue...' : 'Join Virtual Queue'}</span>
-                </button>
-              </div>
-            </div>
-          )}
         </div>
+
+        {branches.length === 0 ? (
+          <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: '60px 40px', textAlign: 'center', border: '2px solid #e2e8f0' }}>
+            <MapPin style={{ width: 48, height: 48, color: '#cbd5e1', margin: '0 auto 16px' }} />
+            <h3 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>No Branches Available</h3>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 20px' }}>There are no branch locations available for this industry at the moment.</p>
+            <button
+              onClick={() => setStep('service')}
+              style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+            >
+              Choose Different Service
+            </button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16 }}>
+            {branches.map((branch) => {
+              const isSelected = selectedBranch === branch.id;
+              const trafficLevel = Math.floor(Math.random() * 3);
+              const trafficBg = ['#f0fdf4', '#fffbeb', '#fff1f2'][trafficLevel];
+              const trafficColor = ['#059669', '#d97706', '#e11d48'][trafficLevel];
+              const trafficLabel = ['Low Traffic', 'Medium Traffic', 'High Traffic'][trafficLevel];
+              const customerCount = [3, 12, 25][trafficLevel];
+              const avgWait = ['5-10 min', '15-25 min', '30-45 min'][trafficLevel];
+              const distance = (Math.random() * 10 + 0.5).toFixed(1);
+
+              return (
+                <div
+                  key={branch.id}
+                  style={{
+                    backgroundColor: '#fff', borderRadius: 16, padding: '22px 20px',
+                    border: `2px solid ${isSelected ? '#2563eb' : '#e2e8f0'}`,
+                    boxShadow: isSelected ? '0 0 0 4px rgba(37,99,235,0.1)' : 'none',
+                    transition: 'border-color 0.15s, box-shadow 0.15s'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16 }}>
+                    <div className={`bg-gradient-to-r ${selectedIndustry.color} rounded-xl p-2.5 flex-shrink-0`}>
+                      <MapPin style={{ width: 20, height: 20, color: '#fff' }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>{branch.name}</h3>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <MapPin style={{ width: 12, height: 12 }} />{branch.address}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Phone style={{ width: 12, height: 12 }} />{branch.phone}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <Clock style={{ width: 12, height: 12 }} />{branch.hours}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14 }}>
+                    <div style={{ backgroundColor: trafficBg, borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
+                      <Users style={{ width: 14, height: 14, color: trafficColor, margin: '0 auto 4px' }} />
+                      <p style={{ fontSize: 10, fontWeight: 700, color: trafficColor, margin: '0 0 2px' }}>{trafficLabel}</p>
+                      <p style={{ fontSize: 10, color: trafficColor, margin: 0, opacity: 0.75 }}>{customerCount} in queue</p>
+                    </div>
+                    <div style={{ backgroundColor: '#eff6ff', borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
+                      <Clock style={{ width: 14, height: 14, color: '#2563eb', margin: '0 auto 4px' }} />
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#2563eb', margin: '0 0 2px' }}>Avg Wait</p>
+                      <p style={{ fontSize: 10, color: '#2563eb', margin: 0, opacity: 0.75 }}>{avgWait}</p>
+                    </div>
+                    <div style={{ backgroundColor: '#f5f3ff', borderRadius: 8, padding: '8px 6px', textAlign: 'center' }}>
+                      <Navigation style={{ width: 14, height: 14, color: '#7c3aed', margin: '0 auto 4px' }} />
+                      <p style={{ fontSize: 10, fontWeight: 700, color: '#7c3aed', margin: '0 0 2px' }}>Distance</p>
+                      <p style={{ fontSize: 10, color: '#7c3aed', margin: 0, opacity: 0.75 }}>{distance} km</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedBranch(branch.id)}
+                    disabled={hasActiveTicket}
+                    style={{
+                      width: '100%', padding: '11px', borderRadius: 10, border: 'none', cursor: hasActiveTicket ? 'not-allowed' : 'pointer',
+                      fontSize: 13, fontWeight: 700,
+                      backgroundColor: hasActiveTicket ? '#e2e8f0' : isSelected ? '#2563eb' : '#f1f5f9',
+                      color: hasActiveTicket ? '#94a3b8' : isSelected ? '#fff' : '#475569',
+                    }}
+                  >
+                    {hasActiveTicket ? 'Ticket Already Active' : isSelected ? 'Selected ✓' : 'Select Branch'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {selectedBranch && (
+          <div style={{ marginTop: 24, backgroundColor: '#fff', borderRadius: 16, padding: '20px 24px', border: '1px solid #bfdbfe', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24 }}>
+            <div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 4px' }}>Ready to Join the Queue?</h3>
+              <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>You'll receive a queue number and real-time updates</p>
+            </div>
+            <button
+              onClick={handleJoinQueue}
+              disabled={loading || hasActiveTicket}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '14px 28px',
+                backgroundColor: loading || hasActiveTicket ? '#94a3b8' : '#2563eb',
+                color: '#fff', border: 'none', borderRadius: 12, cursor: loading || hasActiveTicket ? 'not-allowed' : 'pointer',
+                fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0
+              }}
+            >
+              <Ticket style={{ width: 20, height: 20 }} />
+              {loading ? 'Joining Queue...' : 'Join Virtual Queue'}
+            </button>
+          </div>
+        )}
       </div>
     );
   }

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Send, MessageCircle, CheckCircle, Clock, User, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router';
+import { Send, MessageCircle, CheckCircle, Clock, User, ArrowLeft, Plus, Search, AlertCircle } from 'lucide-react';
 import { useIndustry } from '../contexts/IndustryContext';
 import { industrySupportTopics } from '../data/industryServices';
 
@@ -18,28 +17,42 @@ interface SupportTicket {
   industry?: string;
 }
 
+const STATUS_MAP: Record<string, { label: string; bg: string; color: string }> = {
+  pending:  { label: 'Pending',  bg: '#fffbeb', color: '#d97706' },
+  replied:  { label: 'Replied',  bg: '#eff6ff', color: '#2563eb' },
+  resolved: { label: 'Resolved', bg: '#f0fdf4', color: '#059669' },
+};
+
+function StatusBadge({ status }: { status: string }) {
+  const s = STATUS_MAP[status] || STATUS_MAP.pending;
+  return (
+    <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, backgroundColor: s.bg, color: s.color }}>
+      {s.label}
+    </span>
+  );
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 export function Support() {
   const { industry } = useIndustry();
-  const navigate = useNavigate();
   const [userRole, setUserRole] = useState('customer');
   const [userEmail, setUserEmail] = useState('');
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [showNewTicket, setShowNewTicket] = useState(false);
+  const [view, setView] = useState<'list' | 'new' | 'detail'>('list');
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [supportTopics, setSupportTopics] = useState<string[]>([]);
-  const [formData, setFormData] = useState({
-    subject: '',
-    message: ''
-  });
+  const [formData, setFormData] = useState({ subject: '', message: '' });
+  const [submitting, setSubmitting] = useState(false);
 
-  // Set industry-specific support topics
   useEffect(() => {
     if (!industry) return;
-
-    const industryKey = industry.id as keyof typeof industrySupportTopics;
-    const topics = industrySupportTopics[industryKey] || industrySupportTopics.banking;
-    setSupportTopics(topics);
+    const key = industry.id as keyof typeof industrySupportTopics;
+    setSupportTopics(industrySupportTopics[key] || industrySupportTopics.banking);
   }, [industry]);
 
   useEffect(() => {
@@ -49,26 +62,31 @@ export function Support() {
     setUserRole(role);
     setUserEmail(email);
 
-    // Load tickets from localStorage
-    const storedTickets = JSON.parse(localStorage.getItem('sqms_support_tickets') || '[]');
-
+    const stored: SupportTicket[] = JSON.parse(localStorage.getItem('sqms_support_tickets') || '[]');
     if (role === 'staff' && staffIndustry) {
-      // Filter tickets by staff's industry
-      const filteredTickets = storedTickets.filter((ticket: any) => ticket.industry === staffIndustry);
-      setTickets(filteredTickets);
+      setTickets(stored.filter(t => t.industry === staffIndustry));
     } else {
-      setTickets(storedTickets);
+      setTickets(stored);
     }
   }, []);
 
   const isCustomer = userRole === 'customer';
 
+  const visibleTickets = (isCustomer ? tickets.filter(t => t.customerEmail === userEmail) : tickets)
+    .filter(t => !searchQuery || t.subject.toLowerCase().includes(searchQuery.toLowerCase()) || t.customerName.toLowerCase().includes(searchQuery.toLowerCase()));
+
+  const stats = {
+    total: visibleTickets.length,
+    pending: visibleTickets.filter(t => t.status === 'pending').length,
+    replied: visibleTickets.filter(t => t.status === 'replied').length,
+    resolved: visibleTickets.filter(t => t.status === 'resolved').length,
+  };
+
   const handleSubmitTicket = (e: React.FormEvent) => {
     e.preventDefault();
-
+    setSubmitting(true);
     const userName = localStorage.getItem('sqms_user_name') || 'Customer';
     const userIndustry = localStorage.getItem('sqms_staff_industry') || localStorage.getItem('sqms_industry') || 'banking';
-
     const newTicket: SupportTicket = {
       id: String(Date.now()),
       customerName: userName,
@@ -77,321 +95,307 @@ export function Support() {
       message: formData.message,
       status: 'pending',
       createdAt: new Date().toISOString(),
-      industry: userIndustry
+      industry: userIndustry,
     };
-
-    const updatedTickets = [...tickets, newTicket];
-    setTickets(updatedTickets);
-    localStorage.setItem('sqms_support_tickets', JSON.stringify(updatedTickets));
-
-    alert('Support ticket submitted successfully! You will receive a response soon.');
+    const all: SupportTicket[] = JSON.parse(localStorage.getItem('sqms_support_tickets') || '[]');
+    const updated = [...all, newTicket];
+    localStorage.setItem('sqms_support_tickets', JSON.stringify(updated));
+    setTickets(isCustomer ? updated.filter(t => t.customerEmail === userEmail) : updated);
     setFormData({ subject: '', message: '' });
-    setShowNewTicket(false);
+    setSubmitting(false);
+    setView('list');
   };
 
-  const handleReplyTicket = (ticketId: string) => {
+  const handleReply = (ticketId: string) => {
     if (!replyText.trim()) return;
-
     const staffName = localStorage.getItem('sqms_user_name') || 'Support Staff';
-
-    const updatedTickets = tickets.map(ticket =>
-      ticket.id === ticketId
-        ? {
-            ...ticket,
-            status: 'replied' as const,
-            reply: replyText,
-            repliedAt: new Date().toISOString(),
-            repliedBy: staffName
-          }
-        : ticket
+    const all: SupportTicket[] = JSON.parse(localStorage.getItem('sqms_support_tickets') || '[]');
+    const updated = all.map(t => t.id === ticketId
+      ? { ...t, status: 'replied' as const, reply: replyText, repliedAt: new Date().toISOString(), repliedBy: staffName }
+      : t
     );
-
-    setTickets(updatedTickets);
-    localStorage.setItem('sqms_support_tickets', JSON.stringify(updatedTickets));
+    localStorage.setItem('sqms_support_tickets', JSON.stringify(updated));
+    setTickets(isCustomer ? updated.filter(t => t.customerEmail === userEmail) : updated);
+    setSelectedTicket(updated.find(t => t.id === ticketId) || null);
     setReplyText('');
-    setSelectedTicket(null);
-    alert('Reply sent successfully!');
   };
 
-  const handleResolveTicket = (ticketId: string) => {
-    const updatedTickets = tickets.map(ticket =>
-      ticket.id === ticketId
-        ? { ...ticket, status: 'resolved' as const }
-        : ticket
-    );
-
-    setTickets(updatedTickets);
-    localStorage.setItem('sqms_support_tickets', JSON.stringify(updatedTickets));
+  const handleResolve = (ticketId: string) => {
+    const all: SupportTicket[] = JSON.parse(localStorage.getItem('sqms_support_tickets') || '[]');
+    const updated = all.map(t => t.id === ticketId ? { ...t, status: 'resolved' as const } : t);
+    localStorage.setItem('sqms_support_tickets', JSON.stringify(updated));
+    setTickets(isCustomer ? updated.filter(t => t.customerEmail === userEmail) : updated);
+    setSelectedTicket(updated.find(t => t.id === ticketId) || null);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'replied':
-        return 'bg-blue-100 text-blue-800 border-blue-300';
-      case 'resolved':
-        return 'bg-green-100 text-green-800 border-green-300';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-300';
-    }
-  };
+  // --- Detail View ---
+  if (view === 'detail' && selectedTicket) {
+    const ticket = tickets.find(t => t.id === selectedTicket.id) || selectedTicket;
+    return (
+      <div style={{ maxWidth: 800 }}>
+        <button
+          onClick={() => { setView('list'); setSelectedTicket(null); }}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, marginBottom: 20, padding: 0 }}
+        >
+          <ArrowLeft style={{ width: 16, height: 16 }} /> Back to Tickets
+        </button>
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const userTickets = isCustomer
-    ? tickets.filter(t => t.customerEmail === userEmail)
-    : tickets;
-
-  const IndustryIcon = industry?.icon;
-
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl text-slate-800 mb-2">
-            {isCustomer ? 'Contact Support' : 'Support Tickets'}
-          </h1>
-          <p className="text-slate-600">
-            {isCustomer
-              ? 'Get help from our support team'
-              : 'View and respond to customer support requests'}
-          </p>
-          {industry && (
-            <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg shadow-sm border border-slate-200">
-              <div className={`bg-gradient-to-r ${industry.color} rounded p-1.5`}>
-                {IndustryIcon && <IndustryIcon className="w-3.5 h-3.5 text-white" />}
+        <div style={{ backgroundColor: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', overflow: 'hidden' }}>
+          {/* Ticket header */}
+          <div style={{ padding: '24px 28px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
+            <div>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>{ticket.subject}</h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#64748b' }}>
+                  <User style={{ width: 13, height: 13 }} />{ticket.customerName} · {ticket.customerEmail}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, color: '#64748b' }}>
+                  <Clock style={{ width: 13, height: 13 }} />{formatDate(ticket.createdAt)}
+                </span>
               </div>
-              <span className="text-sm text-slate-700">{industry.name}</span>
             </div>
-          )}
-        </div>
-        {isCustomer && !showNewTicket && !selectedTicket && (
-          <button
-            onClick={() => setShowNewTicket(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
-          >
-            <MessageCircle className="w-5 h-5" />
-            New Ticket
-          </button>
-        )}
-      </div>
-
-      {/* New Ticket Form (Customers Only) */}
-      {isCustomer && showNewTicket && (
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 border border-slate-200">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl text-slate-800">Submit Support Ticket</h2>
-            <button
-              onClick={() => setShowNewTicket(false)}
-              className="text-slate-600 hover:text-blue-600 transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </button>
+            <StatusBadge status={ticket.status} />
           </div>
 
-          <form onSubmit={handleSubmitTicket} className="space-y-6">
+          {/* Conversation */}
+          <div style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Customer message */}
+            <div style={{ backgroundColor: '#f8fafc', borderRadius: 12, padding: '16px 20px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 8px', fontWeight: 600, textTransform: 'uppercase' }}>Customer Message</p>
+              <p style={{ fontSize: 14, color: '#0f172a', margin: 0, lineHeight: 1.7 }}>{ticket.message}</p>
+            </div>
+
+            {/* Staff reply */}
+            {ticket.reply && (
+              <div style={{ backgroundColor: '#eff6ff', borderRadius: 12, padding: '16px 20px', border: '1px solid #bfdbfe' }}>
+                <p style={{ fontSize: 12, color: '#2563eb', margin: '0 0 8px', fontWeight: 600 }}>
+                  Reply from {ticket.repliedBy} · {formatDate(ticket.repliedAt!)}
+                </p>
+                <p style={{ fontSize: 14, color: '#0f172a', margin: 0, lineHeight: 1.7 }}>{ticket.reply}</p>
+              </div>
+            )}
+
+            {/* Reply form for staff/admin */}
+            {!isCustomer && ticket.status !== 'resolved' && (
+              <div style={{ marginTop: 8 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>
+                  {ticket.status === 'replied' ? 'Add Another Reply' : 'Reply to Customer'}
+                </label>
+                <textarea
+                  value={replyText}
+                  onChange={e => setReplyText(e.target.value)}
+                  placeholder="Type your reply here..."
+                  style={{ width: '100%', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#0f172a', resize: 'none', height: 100, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+                />
+                <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+                  <button
+                    onClick={() => handleReply(ticket.id)}
+                    disabled={!replyText.trim()}
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', backgroundColor: replyText.trim() ? '#2563eb' : '#e2e8f0', color: replyText.trim() ? '#fff' : '#94a3b8', border: 'none', borderRadius: 10, cursor: replyText.trim() ? 'pointer' : 'not-allowed', fontSize: 14, fontWeight: 700 }}
+                  >
+                    <Send style={{ width: 15, height: 15 }} /> Send Reply
+                  </button>
+                  <button
+                    onClick={() => handleResolve(ticket.id)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 20px', backgroundColor: '#f0fdf4', color: '#059669', border: '1.5px solid #86efac', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+                  >
+                    <CheckCircle style={{ width: 15, height: 15 }} /> Mark Resolved
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {ticket.status === 'resolved' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 18px', backgroundColor: '#f0fdf4', borderRadius: 10, border: '1px solid #86efac' }}>
+                <CheckCircle style={{ width: 18, height: 18, color: '#059669' }} />
+                <span style={{ fontSize: 14, color: '#059669', fontWeight: 600 }}>This ticket has been resolved</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // --- New Ticket Form ---
+  if (view === 'new' && isCustomer) {
+    return (
+      <div style={{ maxWidth: 680 }}>
+        <button
+          onClick={() => setView('list')}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, marginBottom: 20, padding: 0 }}
+        >
+          <ArrowLeft style={{ width: 16, height: 16 }} /> Back to Tickets
+        </button>
+
+        <div style={{ backgroundColor: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '32px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
+            <div style={{ width: 44, height: 44, backgroundColor: '#eff6ff', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MessageCircle style={{ width: 22, height: 22, color: '#2563eb' }} />
+            </div>
             <div>
-              <label className="text-sm text-slate-600 mb-2 block">Topic Category</label>
+              <h2 style={{ fontSize: 20, fontWeight: 800, color: '#0f172a', margin: 0 }}>Submit Support Ticket</h2>
+              <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0' }}>Our team will respond as soon as possible</p>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmitTicket} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>Topic Category</label>
               <select
                 value={formData.subject}
-                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+                onChange={e => setFormData({ ...formData, subject: e.target.value })}
                 required
+                style={{ width: '100%', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#0f172a', fontFamily: 'inherit', outline: 'none', backgroundColor: '#fff', appearance: 'auto' }}
               >
-                <option value="">Select a topic</option>
-                {supportTopics.map((topic, index) => (
-                  <option key={index} value={topic}>
-                    {topic}
-                  </option>
-                ))}
+                <option value="">Select a topic...</option>
+                {supportTopics.map((topic, i) => <option key={i} value={topic}>{topic}</option>)}
                 <option value="Others">Others</option>
               </select>
             </div>
 
             <div>
-              <label className="text-sm text-slate-600 mb-2 block">Message</label>
+              <label style={{ fontSize: 13, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 8 }}>Message</label>
               <textarea
                 value={formData.message}
-                onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+                onChange={e => setFormData({ ...formData, message: e.target.value })}
                 placeholder="Please describe your issue in detail..."
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none"
                 required
+                style={{ width: '100%', padding: '12px 14px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#0f172a', resize: 'none', height: 130, fontFamily: 'inherit', outline: 'none', lineHeight: 1.6, boxSizing: 'border-box' }}
               />
             </div>
 
-            <div className="flex gap-3">
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
                 type="button"
-                onClick={() => setShowNewTicket(false)}
-                className="flex-1 py-3 border-2 border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 transition-all"
+                onClick={() => setView('list')}
+                style={{ flex: 1, padding: '13px', border: '1.5px solid #e2e8f0', backgroundColor: '#fff', color: '#475569', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                disabled={submitting}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '13px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
               >
-                <Send className="w-5 h-5" />
-                Submit Ticket
+                <Send style={{ width: 15, height: 15 }} />
+                {submitting ? 'Submitting...' : 'Submit Ticket'}
               </button>
             </div>
           </form>
         </div>
-      )}
+      </div>
+    );
+  }
 
-      {/* Ticket Details View */}
-      {selectedTicket && (
-        <div className="bg-white rounded-2xl shadow-lg p-8 mb-8 border border-slate-200">
+  // --- List View ---
+  return (
+    <div style={{ maxWidth: 960 }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
+        <div>
+          <h2 style={{ fontSize: 24, fontWeight: 900, color: '#0f172a', margin: 0 }}>
+            {isCustomer ? 'Support' : 'Support Tickets'}
+          </h2>
+          <p style={{ fontSize: 14, color: '#64748b', margin: '4px 0 0' }}>
+            {isCustomer ? 'Get help from our support team' : 'View and respond to customer support requests'}
+          </p>
+        </div>
+        {isCustomer && (
           <button
-            onClick={() => setSelectedTicket(null)}
-            className="mb-6 flex items-center gap-2 text-slate-600 hover:text-blue-600 transition-colors"
+            onClick={() => setView('new')}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
           >
-            <ArrowLeft className="w-5 h-5" />
-            Back to Tickets
+            <Plus style={{ width: 16, height: 16 }} /> New Ticket
           </button>
+        )}
+      </div>
 
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-2xl text-slate-800">{selectedTicket.subject}</h2>
-              <div className={`px-4 py-2 rounded-full border-2 text-sm ${getStatusColor(selectedTicket.status)}`}>
-                {selectedTicket.status.charAt(0).toUpperCase() + selectedTicket.status.slice(1)}
-              </div>
+      {/* Stats row (staff/admin) */}
+      {!isCustomer && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+          {[
+            { label: 'Total', value: stats.total, color: '#2563eb', bg: '#eff6ff' },
+            { label: 'Pending', value: stats.pending, color: '#d97706', bg: '#fffbeb' },
+            { label: 'Replied', value: stats.replied, color: '#2563eb', bg: '#eff6ff' },
+            { label: 'Resolved', value: stats.resolved, color: '#059669', bg: '#f0fdf4' },
+          ].map(s => (
+            <div key={s.label} style={{ backgroundColor: '#fff', borderRadius: 12, padding: '16px 18px', border: '1px solid #e2e8f0' }}>
+              <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 4px', fontWeight: 600, textTransform: 'uppercase' }}>{s.label}</p>
+              <p style={{ fontSize: 28, fontWeight: 900, color: s.color, margin: 0 }}>{s.value}</p>
             </div>
-
-            <div className="grid md:grid-cols-2 gap-4 mb-6">
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <User className="w-4 h-4" />
-                <span>{selectedTicket.customerName} ({selectedTicket.customerEmail})</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-slate-600">
-                <Clock className="w-4 h-4" />
-                <span>{formatDate(selectedTicket.createdAt)}</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 rounded-xl p-4 mb-6">
-              <p className="text-sm text-slate-600 mb-1">Customer Message:</p>
-              <p className="text-slate-800">{selectedTicket.message}</p>
-            </div>
-
-            {selectedTicket.reply && (
-              <div className="bg-blue-50 rounded-xl p-4 mb-6">
-                <p className="text-sm text-blue-600 mb-1">
-                  Response from {selectedTicket.repliedBy} - {formatDate(selectedTicket.repliedAt!)}
-                </p>
-                <p className="text-slate-800">{selectedTicket.reply}</p>
-              </div>
-            )}
-          </div>
-
-          {!isCustomer && selectedTicket.status !== 'resolved' && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm text-slate-600 mb-2 block">
-                  {selectedTicket.status === 'replied' ? 'Add Another Reply' : 'Reply to Customer'}
-                </label>
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  placeholder="Type your reply here..."
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 h-24 resize-none"
-                />
-              </div>
-
-              <div className="flex gap-3">
-                <button
-                  onClick={() => handleReplyTicket(selectedTicket.id)}
-                  disabled={!replyText.trim()}
-                  className="flex-1 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                  <Send className="w-5 h-5" />
-                  Send Reply
-                </button>
-                <button
-                  onClick={() => handleResolveTicket(selectedTicket.id)}
-                  className="px-6 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-all flex items-center gap-2"
-                >
-                  <CheckCircle className="w-5 h-5" />
-                  Mark Resolved
-                </button>
-              </div>
-            </div>
-          )}
+          ))}
         </div>
       )}
 
-      {/* Tickets List */}
-      {!showNewTicket && !selectedTicket && (
-        <div>
-          <h2 className="text-2xl text-slate-800 mb-6">
-            {isCustomer ? 'Your Support Tickets' : 'All Support Tickets'}
-          </h2>
+      {/* Search */}
+      <div style={{ position: 'relative', marginBottom: 20 }}>
+        <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 16, height: 16, color: '#94a3b8' }} />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="Search tickets..."
+          style={{ width: '100%', padding: '11px 14px 11px 38px', border: '1.5px solid #e2e8f0', borderRadius: 10, fontSize: 14, color: '#0f172a', fontFamily: 'inherit', outline: 'none', backgroundColor: '#fff', boxSizing: 'border-box' }}
+        />
+      </div>
 
-          {userTickets.length === 0 ? (
-            <div className="bg-white rounded-2xl shadow-lg p-12 text-center border border-slate-200">
-              <MessageCircle className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-              <h3 className="text-xl text-slate-800 mb-2">No Support Tickets</h3>
-              <p className="text-slate-600 mb-6">
-                {isCustomer
-                  ? "You haven't submitted any support tickets yet"
-                  : 'No customer support requests at this time'}
-              </p>
-              {isCustomer && (
-                <button
-                  onClick={() => setShowNewTicket(true)}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:shadow-lg transition-all"
-                >
-                  Submit Your First Ticket
-                </button>
+      {/* Empty state */}
+      {visibleTickets.length === 0 ? (
+        <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: '64px 40px', textAlign: 'center', border: '1px solid #e2e8f0' }}>
+          <div style={{ width: 64, height: 64, backgroundColor: '#f1f5f9', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+            <MessageCircle style={{ width: 32, height: 32, color: '#cbd5e1' }} />
+          </div>
+          <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', margin: '0 0 8px' }}>No Support Tickets</h3>
+          <p style={{ fontSize: 14, color: '#94a3b8', margin: '0 0 24px' }}>
+            {isCustomer ? "You haven't submitted any support tickets yet" : 'No customer support requests at this time'}
+          </p>
+          {isCustomer && (
+            <button
+              onClick={() => setView('new')}
+              style={{ padding: '12px 24px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}
+            >
+              Submit Your First Ticket
+            </button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {visibleTickets.map(ticket => (
+            <div
+              key={ticket.id}
+              onClick={() => { setSelectedTicket(ticket); setView('detail'); }}
+              style={{ backgroundColor: '#fff', borderRadius: 14, padding: '18px 22px', border: '1px solid #e2e8f0', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, transition: 'box-shadow 0.15s' }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.boxShadow = '0 4px 16px rgba(0,0,0,0.06)'}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.boxShadow = 'none'}
+            >
+              <div style={{ width: 40, height: 40, backgroundColor: ticket.status === 'pending' ? '#fffbeb' : ticket.status === 'resolved' ? '#f0fdf4' : '#eff6ff', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                {ticket.status === 'pending' && <AlertCircle style={{ width: 20, height: 20, color: '#d97706' }} />}
+                {ticket.status === 'replied' && <MessageCircle style={{ width: 20, height: 20, color: '#2563eb' }} />}
+                {ticket.status === 'resolved' && <CheckCircle style={{ width: 20, height: 20, color: '#059669' }} />}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.subject}</p>
+                  <StatusBadge status={ticket.status} />
+                </div>
+                <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ticket.message}</p>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <User style={{ width: 11, height: 11 }} />{ticket.customerName}
+                  </span>
+                  <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <Clock style={{ width: 11, height: 11 }} />{formatDate(ticket.createdAt)}
+                  </span>
+                </div>
+              </div>
+              {ticket.reply && (
+                <div style={{ backgroundColor: '#eff6ff', borderRadius: 8, padding: '6px 12px', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, color: '#2563eb', fontWeight: 600 }}>Reply received</span>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {userTickets.map((ticket) => (
-                <button
-                  key={ticket.id}
-                  onClick={() => setSelectedTicket(ticket)}
-                  className="bg-white rounded-2xl shadow-lg p-6 border border-slate-200 hover:shadow-xl transition-all text-left"
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className={`px-3 py-1 rounded-full border-2 text-xs ${getStatusColor(ticket.status)}`}>
-                      {ticket.status.charAt(0).toUpperCase() + ticket.status.slice(1)}
-                    </div>
-                    <Clock className="w-4 h-4 text-slate-400" />
-                  </div>
-
-                  <h3 className="text-lg text-slate-800 mb-2 line-clamp-1">{ticket.subject}</h3>
-                  <p className="text-sm text-slate-600 mb-4 line-clamp-2">{ticket.message}</p>
-
-                  <div className="flex items-center justify-between text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <User className="w-3 h-3" />
-                      {ticket.customerName}
-                    </span>
-                    <span>{formatDate(ticket.createdAt)}</span>
-                  </div>
-
-                  {ticket.reply && (
-                    <div className="mt-4 pt-4 border-t border-slate-200">
-                      <p className="text-xs text-blue-600 mb-1">Reply received</p>
-                      <p className="text-sm text-slate-600 line-clamp-2">{ticket.reply}</p>
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
       )}
     </div>
