@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (loggedIn && userEmail && userRole && userName) {
       setUser({
 id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
+
         email: userEmail,
         full_name: userName,
         role: userRole as 'customer' | 'staff' | 'admin' | 'superadmin',
