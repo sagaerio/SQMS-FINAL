@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle2, X, Play, Clock, Users, User, RefreshCw, MapPin, Briefcase, Coffee, Activity } from 'lucide-react';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 type QueueTicket = { id: number; ticket_number: string; customer_name: string; service_name: string; branch_name: string; status: string; position: number; estimated_wait: number; issued_at: string; called_at: string | null; notes: string };
 type QueueStats = { waiting: number; serving: number; completed: number; avg_wait: number };
