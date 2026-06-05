@@ -10,9 +10,9 @@ import {
   createAppointment,
   getCustomerAppointments,
   updateAppointmentStatus,
-  cancelAppointment as cancelSupabaseAppointment,
+  cancelSupabaseAppointment,
   getServicesByIndustry
-} from '../../services/queueService';
+} from '../../services/djangoService';
 import type { Appointment as SupabaseAppointment, Service } from '../../lib/supabase';
 
 interface Appointment {
