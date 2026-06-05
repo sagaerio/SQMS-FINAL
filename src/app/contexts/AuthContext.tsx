@@ -75,22 +75,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
+      if (error || !data) {
+        // User exists in Auth but has no profile row — get their auth info and create one
+        const { data: authData } = await supabase.auth.getUser();
+        const authUser = authData?.user;
+        if (!authUser) throw new Error('Cannot resolve user from auth session');
+
+        const newProfile = {
+          id: userId,
+          email: authUser.email ?? '',
+          full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          role: (authUser.user_metadata?.role as User['role']) || 'customer',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+
+        const { data: inserted, error: insertError } = await supabase
+          .from('users')
+          .upsert(newProfile)
+          .select()
+          .single();
+
+        if (insertError) {
+          // If upsert fails (e.g. RLS), fall back to using the in-memory profile
+          data = newProfile as any;
+        } else {
+          data = inserted;
+        }
+      }
+
       setUser(data);
 
-      // Save user data to localStorage for persistence
+      // Persist to localStorage for page-reload resilience
       localStorage.setItem('sqms_logged_in', 'true');
       localStorage.setItem('sqms_user_email', data.email);
       localStorage.setItem('sqms_user_role', data.role);
       localStorage.setItem('sqms_user_name', data.full_name);
 
-      // Save industry-specific data for staff and admins
       if (data.industry_id) {
         if (data.role === 'admin') {
           localStorage.setItem('sqms_admin_industry', data.industry_id);
@@ -99,17 +126,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Save counter ID for staff
       if (data.role === 'staff' && data.counter_id) {
         localStorage.setItem('sqms_staff_counter', data.counter_id);
       }
 
-      // Save business ID for admins
       if (data.role === 'admin' && data.business_id) {
         localStorage.setItem('sqms_admin_business', data.business_id);
       }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
+    } catch (err) {
+      console.error('Error loading user profile:', err);
     } finally {
       setLoading(false);
     }

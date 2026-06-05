@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
+import { projectId, publicAnonKey } from '../../utils/supabase/info';
 
-const supabaseUrl = 'https://nyhjatpnafdlgmsjbpmv.supabase.co';
-const supabasePublishableKey = 'sb_publishable_0GHnri1jhPs_1TQQkA7gOA_E54B23Fv';
+const supabaseUrl = `https://${projectId}.supabase.co`;
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey);
+export const supabase = createClient(supabaseUrl, publicAnonKey);
 
 // Database Types
 export interface User {

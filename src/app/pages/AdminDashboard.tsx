@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
   Bell, Users, User, CheckCircle2, Clock, Calendar, BarChart2,
   HeadphonesIcon, Settings, FileText, Building2, ChevronRight,
-  Activity, TrendingUp, ArrowRight,
+  Activity, TrendingUp, ArrowRight, RefreshCw,
 } from 'lucide-react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
@@ -44,6 +44,8 @@ export function AdminDashboard() {
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [clock, setClock]   = useState(fmtTime());
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => { const t = setInterval(() => setClock(fmtTime()), 30000); return () => clearInterval(t); }, []);
 
@@ -62,6 +64,25 @@ export function AdminDashboard() {
   }, []);
 
   useEffect(() => { fetchData(); const t = setInterval(fetchData, 30000); return () => clearInterval(t); }, [fetchData]);
+
+  const syncData = async () => {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      const res = await fetch(`${SERVER}/sync-data`, { method: 'POST', headers: hdrs });
+      const d = await res.json();
+      if (res.ok && d.success) {
+        setSyncMsg({ ok: true, text: `Synced ${d.synced.industries} industries, ${d.synced.services} services, ${d.synced.branches} branches` });
+      } else {
+        setSyncMsg({ ok: false, text: d.error || 'Sync failed' });
+      }
+    } catch (e: any) {
+      setSyncMsg({ ok: false, text: e?.message || 'Network error' });
+    } finally {
+      setSyncing(false);
+      setTimeout(() => setSyncMsg(null), 6000);
+    }
+  };
 
   const total = (stats?.waiting ?? 0) + (stats?.serving ?? 0) + (stats?.completed ?? 0);
   const adminInitials = user?.full_name ? user.full_name.trim().split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() : 'A';
@@ -201,6 +222,31 @@ export function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Sync data to Supabase (superadmin only) */}
+      {isSuperAdmin && (
+        <div style={{ backgroundColor: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', padding: '18px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 20 }}>
+          <div>
+            <p style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', margin: '0 0 3px' }}>Sync Data to Supabase</p>
+            <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>Push all industries, services, and branch locations to the live database</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+            {syncMsg && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: syncMsg.ok ? '#059669' : '#e11d48', padding: '6px 12px', borderRadius: 8, backgroundColor: syncMsg.ok ? '#f0fdf4' : '#fff1f2' }}>
+                {syncMsg.text}
+              </span>
+            )}
+            <button
+              onClick={syncData}
+              disabled={syncing}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', backgroundColor: syncing ? '#e2e8f0' : '#2563eb', color: syncing ? '#94a3b8' : '#fff', border: 'none', borderRadius: 10, cursor: syncing ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}
+            >
+              <RefreshCw size={15} style={{ animation: syncing ? 'spin 0.8s linear infinite' : 'none' }} />
+              {syncing ? 'Syncing...' : 'Sync Now'}
+            </button>
+          </div>
+        </div>
+      )}
 
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} .sqms-spinner{animation:spin 0.8s linear infinite}`}</style>
     </div>
