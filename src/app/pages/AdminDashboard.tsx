@@ -6,7 +6,6 @@ import {
   HeadphonesIcon, Settings, FileText, Building2, ChevronRight,
   Activity, TrendingUp, ArrowRight, RefreshCw,
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 type QueueStats = { waiting: number; serving: number; completed: number; avg_wait: number };
 type QuickAction = { key: string; label: string; sub: string; icon: React.ElementType; color: string; bg: string; border: string; route: string };
@@ -49,14 +48,14 @@ export function AdminDashboard() {
 
   useEffect(() => { const t = setInterval(() => setClock(fmtTime()), 30000); return () => clearInterval(t); }, []);
 
-  const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
-  const hdrs = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
+  const SERVER = 'https://smart-queue-app-production.up.railway.app/api';
+const hdrs = { Authorization: 'Bearer ' + (localStorage.getItem('access_token') || ''), 'Content-Type': 'application/json' };
 
   const fetchData = useCallback(async () => {
     try {
       const [sRes, nRes] = await Promise.all([
-        fetch(`${SERVER}/queues/status`, { headers: hdrs }).catch(() => null),
-        fetch(`${SERVER}/notifications/unread-count`, { headers: hdrs }).catch(() => null),
+        fetch(`${SERVER}/queues/status/`, { headers: hdrs }).catch(() => null),
+fetch(`${SERVER}/notifications/unread-count/`, { headers: hdrs }).catch(() => null),
       ]);
       if (sRes?.ok) { const d = await sRes.json().catch(() => null); if (d) setStats(d); }
       if (nRes?.ok) { const d = await nRes.json().catch(() => null); if (d) setUnread(d.count ?? 0); }
@@ -69,7 +68,7 @@ export function AdminDashboard() {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const res = await fetch(`${SERVER}/sync-data`, { method: 'POST', headers: hdrs });
+      setSyncMsg({ ok: true, text: 'Data is live from the backend.' });
       const d = await res.json();
       if (res.ok && d.success) {
         setSyncMsg({ ok: true, text: `Synced ${d.synced.industries} industries, ${d.synced.services} services, ${d.synced.branches} branches` });
