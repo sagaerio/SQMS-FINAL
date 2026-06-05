@@ -95,39 +95,35 @@ export const services: Service[] = [
 ];
 
 export const branches: Branch[] = [
-  // Banking Branches
-  { id: 'banking-1', name: 'First National Bank - Downtown', address: '123 Financial District, Manhattan, NY 10005', phone: '+1 (212) 555-0100', hours: '9:00 AM - 6:00 PM', businessType: 'banking' },
-  { id: 'banking-2', name: 'First National Bank - Midtown', address: '456 Park Avenue, New York, NY 10022', phone: '+1 (212) 555-0200', hours: '9:00 AM - 6:00 PM', businessType: 'banking' },
-  { id: 'banking-3', name: 'First National Bank - Brooklyn', address: '789 Atlantic Avenue, Brooklyn, NY 11217', phone: '+1 (718) 555-0300', hours: '9:00 AM - 5:00 PM', businessType: 'banking' },
-  { id: 'banking-4', name: 'First National Bank - Queens', address: '321 Main Street, Flushing, NY 11354', phone: '+1 (718) 555-0400', hours: '9:00 AM - 5:00 PM', businessType: 'banking' },
+  // Banking
+  { id: 'banking-1', name: 'Brooklyn Service Hub',        address: '456 Atlantic Ave, Brooklyn',        phone: '+1 (718) 555-0100', hours: '9:00 AM – 5:00 PM', businessType: 'banking' },
+  { id: 'banking-2', name: 'Manhattan Financial Center',  address: '123 Wall St, New York',              phone: '+1 (212) 555-0200', hours: '9:00 AM – 6:00 PM', businessType: 'banking' },
+  { id: 'banking-3', name: 'Queens Branch',               address: '789 Queens Blvd, Queens',            phone: '+1 (718) 555-0300', hours: '9:00 AM – 5:00 PM', businessType: 'banking' },
 
-  // Healthcare Branches
-  { id: 'healthcare-1', name: 'City General Hospital - Main Campus', address: '100 Medical Plaza, New York, NY 10016', phone: '+1 (212) 555-1000', hours: '24/7 Emergency', businessType: 'healthcare' },
-  { id: 'healthcare-2', name: 'City General Hospital - North Clinic', address: '250 Health Avenue, Bronx, NY 10461', phone: '+1 (718) 555-1100', hours: '7:00 AM - 10:00 PM', businessType: 'healthcare' },
-  { id: 'healthcare-3', name: 'City General Hospital - East Center', address: '500 Wellness Drive, Queens, NY 11365', phone: '+1 (718) 555-1200', hours: '8:00 AM - 8:00 PM', businessType: 'healthcare' },
-  { id: 'healthcare-4', name: 'City General Hospital - Community Clinic', address: '75 Care Street, Brooklyn, NY 11201', phone: '+1 (718) 555-1300', hours: '8:00 AM - 6:00 PM', businessType: 'healthcare' },
+  // Corporate
+  { id: 'corporate-1', name: 'East Hub',              address: '88 East Business Park',         phone: '+1 (212) 555-6100', hours: '8:00 AM – 6:00 PM', businessType: 'corporate' },
+  { id: 'corporate-2', name: 'HQ Tower A – Floor 12', address: '1 Corporate Blvd, CBD',         phone: '+1 (212) 555-6200', hours: '9:00 AM – 6:00 PM', businessType: 'corporate' },
+  { id: 'corporate-3', name: 'West Office Park',      address: '33 Business Park, West',        phone: '+1 (212) 555-6300', hours: '9:00 AM – 5:00 PM', businessType: 'corporate' },
 
-  // Retail Branches
-  { id: 'retail-1', name: 'MegaStore - Manhattan Plaza', address: '200 Shopping Center, New York, NY 10001', phone: '+1 (212) 555-4000', hours: '10:00 AM - 9:00 PM', businessType: 'retail' },
-  { id: 'retail-2', name: 'MegaStore - Brooklyn Mall', address: '350 Retail Avenue, Brooklyn, NY 11220', phone: '+1 (718) 555-4100', hours: '10:00 AM - 8:00 PM', businessType: 'retail' },
-  { id: 'retail-3', name: 'MegaStore - Queens Center', address: '450 Commerce Drive, Queens, NY 11373', phone: '+1 (718) 555-4200', hours: '9:00 AM - 9:00 PM', businessType: 'retail' },
+  // Education
+  { id: 'education-1', name: 'City Learning Centre',       address: '12 City Rd, Downtown',          phone: '+1 (212) 555-5100', hours: '8:00 AM – 6:00 PM', businessType: 'education' },
+  { id: 'education-2', name: 'East Campus',                address: 'East Wing, Campus B',           phone: '+1 (212) 555-5200', hours: '8:00 AM – 5:00 PM', businessType: 'education' },
+  { id: 'education-3', name: 'Main Campus – Admin Block',  address: 'Building A, Main Campus',       phone: '+1 (212) 555-5300', hours: '9:00 AM – 5:00 PM', businessType: 'education' },
 
-  // Government Offices
-  { id: 'government-1', name: 'Department of Motor Vehicles - Manhattan', address: '11 Greenwich Street, New York, NY 10004', phone: '+1 (212) 555-2000', hours: '8:30 AM - 4:30 PM', businessType: 'government' },
-  { id: 'government-2', name: 'City Hall Services Center', address: '1 City Hall Plaza, New York, NY 10007', phone: '+1 (212) 555-2100', hours: '9:00 AM - 5:00 PM', businessType: 'government' },
-  { id: 'government-3', name: 'Social Services Office - Brooklyn', address: '350 Jay Street, Brooklyn, NY 11201', phone: '+1 (718) 555-2200', hours: '9:00 AM - 5:00 PM', businessType: 'government' },
-  { id: 'government-4', name: 'Tax Assessment Office', address: '66 John Street, New York, NY 10038', phone: '+1 (212) 555-2300', hours: '9:00 AM - 4:00 PM', businessType: 'government' },
+  // Government
+  { id: 'government-1', name: 'City Hall – Main Office',  address: '1 Civic Square, Downtown',    phone: '+1 (212) 555-2100', hours: '9:00 AM – 5:00 PM', businessType: 'government' },
+  { id: 'government-2', name: 'North District Office',    address: '44 North Ave, Northgate',     phone: '+1 (212) 555-2200', hours: '8:30 AM – 4:30 PM', businessType: 'government' },
+  { id: 'government-3', name: 'South Service Centre',     address: '77 South Rd, Southville',     phone: '+1 (212) 555-2300', hours: '9:00 AM – 5:00 PM', businessType: 'government' },
 
-  // Education Branches
-  { id: 'education-1', name: 'State University - Main Campus', address: '1 University Plaza, New York, NY 10003', phone: '+1 (212) 555-5000', hours: '8:00 AM - 6:00 PM', businessType: 'education' },
-  { id: 'education-2', name: 'State University - Admissions Office', address: '50 Student Center, New York, NY 10003', phone: '+1 (212) 555-5100', hours: '9:00 AM - 5:00 PM', businessType: 'education' },
-  { id: 'education-3', name: 'Community College - Brooklyn Campus', address: '300 Education Way, Brooklyn, NY 11210', phone: '+1 (718) 555-5200', hours: '8:00 AM - 7:00 PM', businessType: 'education' },
+  // Healthcare
+  { id: 'healthcare-1', name: 'Eastside Medical Center',  address: '88 Eastside Rd, East',         phone: '+1 (212) 555-1100', hours: '7:00 AM – 8:00 PM', businessType: 'healthcare' },
+  { id: 'healthcare-2', name: 'Main Hospital – Downtown', address: '10 Medical Blvd, Downtown',    phone: '+1 (212) 555-1200', hours: '24/7',               businessType: 'healthcare' },
+  { id: 'healthcare-3', name: 'Northside Clinic',         address: '22 Health Ave, Northside',     phone: '+1 (212) 555-1300', hours: '8:00 AM – 6:00 PM', businessType: 'healthcare' },
 
-  // Corporate Branches
-  { id: 'corporate-1', name: 'TechCorp Headquarters - Floor 5 HR', address: '500 Corporate Plaza, New York, NY 10017', phone: '+1 (212) 555-6000', hours: '9:00 AM - 6:00 PM', businessType: 'corporate' },
-  { id: 'corporate-2', name: 'TechCorp - IT Help Desk', address: '500 Corporate Plaza, Floor 2, New York, NY 10017', phone: '+1 (212) 555-6100', hours: '8:00 AM - 8:00 PM', businessType: 'corporate' },
-  { id: 'corporate-3', name: 'TechCorp - Brooklyn Office', address: '100 Business Park, Brooklyn, NY 11201', phone: '+1 (718) 555-6200', hours: '9:00 AM - 6:00 PM', businessType: 'corporate' },
-
+  // Retail
+  { id: 'retail-1', name: 'Flagship Store – Downtown', address: '1 Retail Plaza, Downtown',   phone: '+1 (212) 555-4100', hours: '10:00 AM – 9:00 PM', businessType: 'retail' },
+  { id: 'retail-2', name: 'Mall Branch',               address: 'Level 2, Central Mall',      phone: '+1 (212) 555-4200', hours: '10:00 AM – 8:00 PM', businessType: 'retail' },
+  { id: 'retail-3', name: 'Westside Outlet',           address: '55 West Rd, Westside',       phone: '+1 (212) 555-4300', hours: '9:00 AM – 9:00 PM',  businessType: 'retail' },
 ];
 
 // Helper function to get branches by industry (handles both old and new naming)

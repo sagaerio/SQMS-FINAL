@@ -1,319 +1,75 @@
 export const industryServices = {
   banking: [
-    {
-      id: 1,
-      name: 'Account Opening',
-      description: 'Open new savings or checking accounts',
-      duration: '30 min',
-      category: 'Account Services'
-    },
-    {
-      id: 2,
-      name: 'Loan Services',
-      description: 'Personal and business loan consultation',
-      duration: '45 min',
-      category: 'Loan Services'
-    },
-    {
-      id: 3,
-      name: 'Credit Card Services',
-      description: 'Credit and debit card applications',
-      duration: '30 min',
-      category: 'Card Services'
-    },
-    {
-      id: 4,
-      name: 'Investment Consultation',
-      description: 'Financial planning and investment advice',
-      duration: '60 min',
-      category: 'Investment Services'
-    },
-    {
-      id: 5,
-      name: 'Document Verification',
-      description: 'Verify and process your documents',
-      duration: '25 min',
-      category: 'Document Services'
-    },
-    {
-      id: 6,
-      name: 'General Banking Inquiry',
-      description: 'Ask questions about banking services',
-      duration: '15 min',
-      category: 'Customer Support'
-    }
-  ],
-  healthcare: [
-    {
-      id: 1,
-      name: 'General Consultation',
-      description: 'Routine medical checkup and consultation',
-      duration: '30 min',
-      category: 'Medical Services'
-    },
-    {
-      id: 2,
-      name: 'Specialist Appointment',
-      description: 'Consultation with medical specialists',
-      duration: '45 min',
-      category: 'Medical Services'
-    },
-    {
-      id: 3,
-      name: 'Lab Tests',
-      description: 'Blood tests and diagnostic services',
-      duration: '20 min',
-      category: 'Diagnostic Services'
-    },
-    {
-      id: 4,
-      name: 'Vaccination',
-      description: 'Immunization and vaccination services',
-      duration: '15 min',
-      category: 'Preventive Care'
-    },
-    {
-      id: 5,
-      name: 'Prescription Refill',
-      description: 'Medication prescription renewal',
-      duration: '10 min',
-      category: 'Pharmacy Services'
-    },
-    {
-      id: 6,
-      name: 'Emergency Care',
-      description: 'Urgent medical attention',
-      duration: '20 min',
-      category: 'Emergency Services'
-    }
-  ],
-  retail: [
-    {
-      id: 1,
-      name: 'Product Return',
-      description: 'Return or exchange products',
-      duration: '15 min',
-      category: 'Returns & Exchanges'
-    },
-    {
-      id: 2,
-      name: 'Customer Service',
-      description: 'General customer service inquiries',
-      duration: '20 min',
-      category: 'Customer Support'
-    },
-    {
-      id: 3,
-      name: 'Product Consultation',
-      description: 'Expert advice on product selection',
-      duration: '30 min',
-      category: 'Sales Support'
-    },
-    {
-      id: 4,
-      name: 'Gift Registry',
-      description: 'Set up or manage gift registries',
-      duration: '25 min',
-      category: 'Special Services'
-    },
-    {
-      id: 5,
-      name: 'Personal Shopping',
-      description: 'One-on-one shopping assistance',
-      duration: '60 min',
-      category: 'Premium Services'
-    },
-    {
-      id: 6,
-      name: 'Technical Support',
-      description: 'Help with electronics and tech products',
-      duration: '30 min',
-      category: 'Tech Support'
-    }
-  ],
-  government: [
-    {
-      id: 1,
-      name: 'License Renewal',
-      description: 'Renew driver\'s license or ID',
-      duration: '30 min',
-      category: 'Licensing Services'
-    },
-    {
-      id: 2,
-      name: 'Permit Application',
-      description: 'Apply for building or business permits',
-      duration: '45 min',
-      category: 'Permit Services'
-    },
-    {
-      id: 3,
-      name: 'Document Filing',
-      description: 'File official documents and forms',
-      duration: '25 min',
-      category: 'Documentation'
-    },
-    {
-      id: 4,
-      name: 'Tax Assistance',
-      description: 'Help with tax filing and questions',
-      duration: '40 min',
-      category: 'Tax Services'
-    },
-    {
-      id: 5,
-      name: 'Public Records Request',
-      description: 'Request public records and certificates',
-      duration: '20 min',
-      category: 'Records Services'
-    },
-    {
-      id: 6,
-      name: 'General Inquiry',
-      description: 'General questions about public services',
-      duration: '15 min',
-      category: 'Information Services'
-    }
-  ],
-  education: [
-    {
-      id: 1,
-      name: 'Student Admissions',
-      description: 'New student enrollment consultation',
-      duration: '45 min',
-      category: 'Admissions'
-    },
-    {
-      id: 2,
-      name: 'Academic Counseling',
-      description: 'Course selection and academic guidance',
-      duration: '30 min',
-      category: 'Counseling Services'
-    },
-    {
-      id: 3,
-      name: 'Financial Aid',
-      description: 'Student financial aid consultation',
-      duration: '40 min',
-      category: 'Financial Services'
-    },
-    {
-      id: 4,
-      name: 'Transcript Request',
-      description: 'Request academic transcripts',
-      duration: '15 min',
-      category: 'Records Services'
-    },
-    {
-      id: 5,
-      name: 'Registration Support',
-      description: 'Help with course registration',
-      duration: '20 min',
-      category: 'Registration Services'
-    },
-    {
-      id: 6,
-      name: 'Career Services',
-      description: 'Career counseling and job placement',
-      duration: '35 min',
-      category: 'Career Services'
-    }
+    { id: 1, name: 'Account Opening',    description: 'Open a new savings or checking account',       duration: '30 min', category: 'Account Services' },
+    { id: 2, name: 'Card Services',       description: 'Credit and debit card applications',            duration: '20 min', category: 'Card Services'    },
+    { id: 3, name: 'Customer Service',    description: 'General banking enquiries and assistance',      duration: '10 min', category: 'Customer Support' },
+    { id: 4, name: 'Loan Consultation',   description: 'Personal and business loan consultation',       duration: '45 min', category: 'Loan Services'    },
+    { id: 5, name: 'Teller Services',     description: 'Cash deposits, withdrawals and transfers',      duration: '10 min', category: 'Teller Services'  },
   ],
   corporate: [
-    {
-      id: 1,
-      name: 'IT Support',
-      description: 'Technical support for hardware/software',
-      duration: '30 min',
-      category: 'IT Services'
-    },
-    {
-      id: 2,
-      name: 'HR Consultation',
-      description: 'HR inquiries and employee services',
-      duration: '25 min',
-      category: 'HR Services'
-    },
-    {
-      id: 3,
-      name: 'Facilities Request',
-      description: 'Building maintenance and facilities',
-      duration: '20 min',
-      category: 'Facilities Management'
-    },
-    {
-      id: 4,
-      name: 'Meeting Room Booking',
-      description: 'Reserve conference rooms',
-      duration: '10 min',
-      category: 'Space Management'
-    },
-    {
-      id: 5,
-      name: 'Office Supplies',
-      description: 'Request office supplies and equipment',
-      duration: '15 min',
-      category: 'Supply Services'
-    },
-    {
-      id: 6,
-      name: 'General Admin Support',
-      description: 'Administrative assistance',
-      duration: '20 min',
-      category: 'Administrative Services'
-    }
-  ]
+    { id: 1, name: 'Facilities',  description: 'Building maintenance and facilities requests', duration: '10 min', category: 'Facilities Management' },
+    { id: 2, name: 'HR Services', description: 'HR inquiries and employee services',           duration: '20 min', category: 'HR Services'           },
+    { id: 3, name: 'IT Support',  description: 'Technical support for hardware and software',  duration: '15 min', category: 'IT Services'           },
+    { id: 4, name: 'Reception',   description: 'Visitor registration and general reception',   duration: '5 min',  category: 'Reception'             },
+  ],
+  education: [
+    { id: 1, name: 'Admissions',       description: 'New student enrollment consultation',      duration: '20 min', category: 'Admissions'           },
+    { id: 2, name: 'Financial Aid',    description: 'Student financial aid consultation',        duration: '30 min', category: 'Financial Services'   },
+    { id: 3, name: 'Library Services', description: 'Library access, books and resources',      duration: '5 min',  category: 'Library Services'     },
+    { id: 4, name: 'Registrar',        description: 'Course registration and academic records', duration: '15 min', category: 'Registration Services'},
+  ],
+  government: [
+    { id: 1, name: 'Document Processing',  description: 'Processing of official documents and forms',  duration: '40 min', category: 'Documentation'    },
+    { id: 2, name: 'General Inquiries',    description: 'General questions about public services',      duration: '15 min', category: 'Information'      },
+    { id: 3, name: 'ID / Passport Renewal',description: 'Renew national ID or passport',               duration: '45 min', category: 'Identity Services'},
+    { id: 4, name: 'Permits & Licenses',   description: 'Apply for business or building permits',       duration: '35 min', category: 'Permit Services'  },
+  ],
+  healthcare: [
+    { id: 1, name: 'Blood Test / Lab',   description: 'Blood tests and diagnostic lab services',     duration: '20 min', category: 'Diagnostic Services' },
+    { id: 2, name: 'Dental',             description: 'Dental checkup and treatment',                duration: '25 min', category: 'Dental Services'     },
+    { id: 3, name: 'General Practitioner',description: 'Routine consultation with a GP',             duration: '30 min', category: 'Medical Services'    },
+    { id: 4, name: 'Pharmacy Pickup',    description: 'Prescription collection and dispensing',      duration: '5 min',  category: 'Pharmacy Services'   },
+    { id: 5, name: 'Specialist Consult', description: 'Consultation with a medical specialist',      duration: '40 min', category: 'Medical Services'    },
+  ],
+  retail: [
+    { id: 1, name: 'Click & Collect',      description: 'Collect your online order in-store',         duration: '5 min',  category: 'Order Services'      },
+    { id: 2, name: 'Customer Service',     description: 'General customer service and enquiries',      duration: '8 min',  category: 'Customer Support'    },
+    { id: 3, name: 'Returns & Exchanges',  description: 'Return or exchange purchased items',          duration: '12 min', category: 'Returns & Exchanges' },
+    { id: 4, name: 'Tech Support',         description: 'Technical help with electronics and devices', duration: '25 min', category: 'Tech Support'        },
+  ],
 };
 
 export const industryBranches = {
   banking: [
-    'New York - Manhattan',
-    'Los Angeles - Downtown',
-    'Chicago - Loop',
-    'San Francisco - Financial District',
-    'Miami - Brickell',
-    'Boston - Back Bay'
-  ],
-  healthcare: [
-    'Main Hospital - Downtown',
-    'West Side Medical Center',
-    'East Valley Clinic',
-    'North Shore Hospital',
-    'South Bay Medical Plaza',
-    'Central Health Facility'
-  ],
-  retail: [
-    'Flagship Store - Downtown',
-    'Mall of America Location',
-    'Westfield Shopping Center',
-    'Premium Outlet Store',
-    'City Center Branch',
-    'Suburban Plaza Store'
-  ],
-  government: [
-    'City Hall - Main Office',
-    'County Administration Building',
-    'DMV Center - Downtown',
-    'Public Services Plaza',
-    'Municipal Services Center',
-    'Regional Government Office'
-  ],
-  education: [
-    'Main Campus - Admissions',
-    'Student Services Building',
-    'Registrar Office',
-    'Financial Aid Center',
-    'Career Development Center',
-    'Academic Advising Office'
+    'Brooklyn Service Hub',
+    'Manhattan Financial Center',
+    'Queens Branch',
   ],
   corporate: [
-    'Headquarters - Main Building',
-    'North Campus Office',
-    'Tech Center',
-    'Corporate Plaza',
-    'Business Park Location',
-    'Regional Office'
-  ]
+    'East Hub',
+    'HQ Tower A – Floor 12',
+    'West Office Park',
+  ],
+  education: [
+    'City Learning Centre',
+    'East Campus',
+    'Main Campus – Admin Block',
+  ],
+  government: [
+    'City Hall – Main Office',
+    'North District Office',
+    'South Service Centre',
+  ],
+  healthcare: [
+    'Eastside Medical Center',
+    'Main Hospital – Downtown',
+    'Northside Clinic',
+  ],
+  retail: [
+    'Flagship Store – Downtown',
+    'Mall Branch',
+    'Westside Outlet',
+  ],
 };
 
 export const industrySupportTopics = {

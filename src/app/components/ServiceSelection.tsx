@@ -9,50 +9,46 @@ interface Service {
   estimated_time?: number;
 }
 
-// Keep as fallback for industries without services in DB
+// Fallback data used when Supabase has no records for the industry
 const servicesByIndustry: Record<string, Service[]> = {
   banking: [
-    { id: 'account-opening', name: 'Account Opening', description: 'Open a new bank account' },
-    { id: 'loan-inquiry', name: 'Loan Inquiry', description: 'Inquire about loan options' },
-    { id: 'investment-consultation', name: 'Investment Consultation', description: 'Discuss investment opportunities' },
-    { id: 'card-services', name: 'Card Services', description: 'Credit/debit card services' },
-    { id: 'general-inquiry', name: 'General Inquiry', description: 'General banking questions' }
-  ],
-  healthcare: [
-    { id: 'general-consultation', name: 'General Consultation', description: 'See a general practitioner' },
-    { id: 'specialist-consultation', name: 'Specialist Consultation', description: 'See a specialist doctor' },
-    { id: 'lab-tests', name: 'Lab Tests', description: 'Get lab work done' },
-    { id: 'prescription-refill', name: 'Prescription Refill', description: 'Refill your prescription' },
-    { id: 'vaccination', name: 'Vaccination', description: 'Get vaccinated' }
-  ],
-  retail: [
-    { id: 'product-inquiry', name: 'Product Inquiry', description: 'Ask about products' },
-    { id: 'returns-exchanges', name: 'Returns & Exchanges', description: 'Return or exchange items' },
-    { id: 'customer-support', name: 'Customer Support', description: 'Get assistance' },
-    { id: 'warranty-service', name: 'Warranty Service', description: 'Warranty claims' },
-    { id: 'personal-shopping', name: 'Personal Shopping', description: 'Personal shopping assistance' }
-  ],
-  government: [
-    { id: 'documentation', name: 'Documentation', description: 'Document processing' },
-    { id: 'permits-licenses', name: 'Permits & Licenses', description: 'Apply for permits or licenses' },
-    { id: 'public-records', name: 'Public Records', description: 'Access public records' },
-    { id: 'general-inquiry', name: 'General Inquiry', description: 'General government services' },
-    { id: 'citizen-services', name: 'Citizen Services', description: 'Various citizen services' }
-  ],
-  education: [
-    { id: 'admissions', name: 'Admissions', description: 'Admission inquiries' },
-    { id: 'counseling', name: 'Counseling', description: 'Academic counseling' },
-    { id: 'registration', name: 'Registration', description: 'Course registration' },
-    { id: 'financial-aid', name: 'Financial Aid', description: 'Financial aid assistance' },
-    { id: 'student-services', name: 'Student Services', description: 'General student services' }
+    { id: 'account-opening',   name: 'Account Opening',    description: 'Open a new savings or checking account',      estimated_time: 30 },
+    { id: 'card-services',     name: 'Card Services',       description: 'Credit and debit card applications',           estimated_time: 20 },
+    { id: 'customer-service',  name: 'Customer Service',    description: 'General banking enquiries and assistance',     estimated_time: 10 },
+    { id: 'loan-consultation', name: 'Loan Consultation',   description: 'Personal and business loan consultation',      estimated_time: 45 },
+    { id: 'teller-services',   name: 'Teller Services',     description: 'Cash deposits, withdrawals and transfers',     estimated_time: 10 },
   ],
   corporate: [
-    { id: 'hr-services', name: 'HR Services', description: 'Human resources assistance' },
-    { id: 'it-support', name: 'IT Support', description: 'Technical support' },
-    { id: 'facilities', name: 'Facilities', description: 'Facility management' },
-    { id: 'security', name: 'Security', description: 'Security services' },
-    { id: 'general-services', name: 'General Services', description: 'General office services' }
-  ]
+    { id: 'facilities',   name: 'Facilities',  description: 'Building maintenance and facilities requests', estimated_time: 10 },
+    { id: 'hr-services',  name: 'HR Services', description: 'HR inquiries and employee services',           estimated_time: 20 },
+    { id: 'it-support',   name: 'IT Support',  description: 'Technical support for hardware and software',  estimated_time: 15 },
+    { id: 'reception',    name: 'Reception',   description: 'Visitor registration and general reception',   estimated_time: 5  },
+  ],
+  education: [
+    { id: 'admissions',       name: 'Admissions',       description: 'New student enrollment consultation',      estimated_time: 20 },
+    { id: 'financial-aid',    name: 'Financial Aid',    description: 'Student financial aid consultation',        estimated_time: 30 },
+    { id: 'library-services', name: 'Library Services', description: 'Library access, books and resources',      estimated_time: 5  },
+    { id: 'registrar',        name: 'Registrar',        description: 'Course registration and academic records', estimated_time: 15 },
+  ],
+  government: [
+    { id: 'document-processing',   name: 'Document Processing',   description: 'Processing of official documents and forms', estimated_time: 40 },
+    { id: 'general-inquiries',     name: 'General Inquiries',     description: 'General questions about public services',     estimated_time: 15 },
+    { id: 'id-passport-renewal',   name: 'ID / Passport Renewal', description: 'Renew national ID or passport',               estimated_time: 45 },
+    { id: 'permits-licenses',      name: 'Permits & Licenses',    description: 'Apply for business or building permits',       estimated_time: 35 },
+  ],
+  healthcare: [
+    { id: 'blood-test-lab',      name: 'Blood Test / Lab',    description: 'Blood tests and diagnostic lab services',    estimated_time: 20 },
+    { id: 'dental',              name: 'Dental',              description: 'Dental checkup and treatment',               estimated_time: 25 },
+    { id: 'general-practitioner',name: 'General Practitioner',description: 'Routine consultation with a GP',             estimated_time: 30 },
+    { id: 'pharmacy-pickup',     name: 'Pharmacy Pickup',     description: 'Prescription collection and dispensing',     estimated_time: 5  },
+    { id: 'specialist-consult',  name: 'Specialist Consult',  description: 'Consultation with a medical specialist',     estimated_time: 40 },
+  ],
+  retail: [
+    { id: 'click-collect',     name: 'Click & Collect',     description: 'Collect your online order in-store',          estimated_time: 5  },
+    { id: 'customer-service',  name: 'Customer Service',    description: 'General customer service and enquiries',       estimated_time: 8  },
+    { id: 'returns-exchanges', name: 'Returns & Exchanges', description: 'Return or exchange purchased items',           estimated_time: 12 },
+    { id: 'tech-support',      name: 'Tech Support',        description: 'Technical help with electronics and devices',  estimated_time: 25 },
+  ],
 };
 
 const industryIcons: Record<string, any> = {

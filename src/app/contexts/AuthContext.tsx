@@ -20,6 +20,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Check for any logged-in user in localStorage (demo, staff, admin, etc.)
     const loggedIn = localStorage.getItem('sqms_logged_in') === 'true' ||
                      localStorage.getItem('sqms_demo_logged_in') === 'true';
     const userEmail = localStorage.getItem('sqms_user_email');
@@ -27,9 +28,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const userName = localStorage.getItem('sqms_user_name');
 
     if (loggedIn && userEmail && userRole && userName) {
+      // Restore user from localStorage
       setUser({
-id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
-
+        id: userEmail === 'demo@customer.com' ? 'demo-user-id' : `user-${userEmail}`,
         email: userEmail,
         full_name: userName,
         role: userRole as 'customer' | 'staff' | 'admin' | 'superadmin',
@@ -40,6 +41,7 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
       return;
     }
 
+    // Get initial session from Supabase
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
@@ -49,9 +51,11 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
       }
     });
 
+    // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
+      // Skip if user is logged in via localStorage
       if (localStorage.getItem('sqms_logged_in') === 'true' ||
           localStorage.getItem('sqms_demo_logged_in') === 'true') {
         return;
@@ -80,11 +84,13 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
       if (error) throw error;
       setUser(data);
 
+      // Save user data to localStorage for persistence
       localStorage.setItem('sqms_logged_in', 'true');
       localStorage.setItem('sqms_user_email', data.email);
       localStorage.setItem('sqms_user_role', data.role);
       localStorage.setItem('sqms_user_name', data.full_name);
 
+      // Save industry-specific data for staff and admins
       if (data.industry_id) {
         if (data.role === 'admin') {
           localStorage.setItem('sqms_admin_industry', data.industry_id);
@@ -93,10 +99,12 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
         }
       }
 
+      // Save counter ID for staff
       if (data.role === 'staff' && data.counter_id) {
         localStorage.setItem('sqms_staff_counter', data.counter_id);
       }
 
+      // Save business ID for admins
       if (data.role === 'admin' && data.business_id) {
         localStorage.setItem('sqms_admin_business', data.business_id);
       }
@@ -109,7 +117,7 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
 
   const signIn = async (email: string, password: string) => {
     try {
-      // Demo account
+      // Support demo account
       if (email.trim().toLowerCase() === 'demo@customer.com' && password === 'demo123') {
         const demoUser: User = {
           id: 'demo-user-id',
@@ -120,6 +128,7 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
           updated_at: new Date().toISOString()
         };
         setUser(demoUser);
+        // Save demo credentials to local storage for persistence across reloads
         localStorage.setItem('sqms_demo_logged_in', 'true');
         localStorage.setItem('sqms_user_email', 'demo@customer.com');
         localStorage.setItem('sqms_user_role', 'customer');
@@ -127,35 +136,18 @@ id: userEmail === 'demo@customer.com' ? 'demo-user-id' : 'user-' + userEmail,
         return { error: null };
       }
 
-const res = await fetch(import.meta.env.VITE_API_URL + '/accounts/login/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const data = await res.json();
+      if (error) throw error;
 
-      if (!res.ok) {
-        throw new Error(data.detail || 'Invalid email or password');
+      if (data.user) {
+        await loadUserProfile(data.user.id);
+        // Set logged in flag for Supabase users too
+        localStorage.setItem('sqms_logged_in', 'true');
       }
-
-      localStorage.setItem('access_token', data.tokens.access);
-      localStorage.setItem('refresh_token', data.tokens.refresh);
-
-      const djangoUser: User = {
-        id: String(data.user.id),
-        email: data.user.email,
-        full_name: data.user.full_name || email,
-        role: data.user.role || 'customer',
-        created_at: data.user.date_joined || new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      setUser(djangoUser);
-      localStorage.setItem('sqms_logged_in', 'true');
-      localStorage.setItem('sqms_user_email', djangoUser.email);
-      localStorage.setItem('sqms_user_role', djangoUser.role);
-      localStorage.setItem('sqms_user_name', djangoUser.full_name);
 
       return { error: null };
     } catch (error) {
@@ -165,6 +157,7 @@ const res = await fetch(import.meta.env.VITE_API_URL + '/accounts/login/', {
 
   const signUp = async (email: string, password: string, fullName: string, role: string) => {
     try {
+      // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
@@ -173,6 +166,7 @@ const res = await fetch(import.meta.env.VITE_API_URL + '/accounts/login/', {
       if (authError) throw authError;
       if (!authData.user) throw new Error('User creation failed');
 
+      // Create user profile
       const { error: profileError } = await supabase
         .from('users')
         .insert({
@@ -193,14 +187,14 @@ const res = await fetch(import.meta.env.VITE_API_URL + '/accounts/login/', {
   };
 
   const signOut = async () => {
+    // Clear all localStorage auth flags
     localStorage.removeItem('sqms_demo_logged_in');
     localStorage.removeItem('sqms_logged_in');
     localStorage.removeItem('sqms_user_email');
     localStorage.removeItem('sqms_user_role');
     localStorage.removeItem('sqms_user_name');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
 
+    // Clear Supabase session
     await supabase.auth.signOut();
 
     setUser(null);
