@@ -10,9 +10,9 @@ import {
   createAppointment,
   getCustomerAppointments,
   updateAppointmentStatus,
-  cancelSupabaseAppointment,
+  cancelAppointment as cancelSupabaseAppointment,
   getServicesByIndustry
-} from '../../services/djangoService';
+} from '../../services/queueService';
 import type { Appointment as SupabaseAppointment, Service } from '../../lib/supabase';
 
 interface Appointment {
@@ -140,7 +140,7 @@ export function Appointments() {
       }
 
       // For customers, show only their appointments
-      const { data, error } = await getCustomerAppointments(user.id);
+      const { data, error } = await getCustomerAppointments();
 
       if (data) {
         // Add demo appointments to show slot blocking functionality
@@ -229,13 +229,21 @@ export function Appointments() {
       return;
     }
 
+    // Convert IDs to numbers for Django backend
+    const serviceId = typeof selectedService.id === 'string' ? parseInt(selectedService.id) : selectedService.id;
+    const branchId = formData.branch ? (typeof formData.branch === 'string' ? parseInt(formData.branch) : formData.branch) : 0;
+
+    if (isNaN(serviceId) || isNaN(branchId) || branchId === 0) {
+      alert('Please select a valid service and branch');
+      setSubmitting(false);
+      return;
+    }
+
     const { data, error } = await createAppointment(
-      user.id,
-      industry.id,
-      selectedService.id,
+      serviceId,
+      branchId,
       formData.date,
       formData.time,
-      formData.branch || undefined,
       formData.notes
     );
 
@@ -246,7 +254,7 @@ export function Appointments() {
     }
 
     // Reload appointments
-    const result = await getCustomerAppointments(user.id);
+    const result = await getCustomerAppointments();
     if (result.data) {
       setAppointments(result.data);
     }
@@ -284,7 +292,7 @@ export function Appointments() {
 
     // Reload appointments
     if (user) {
-      const result = await getCustomerAppointments(user.id);
+      const result = await getCustomerAppointments();
       if (result.data) {
         setAppointments(result.data);
       }
@@ -310,7 +318,7 @@ export function Appointments() {
 
     // Reload appointments
     if (user) {
-      const result = await getCustomerAppointments(user.id);
+      const result = await getCustomerAppointments();
       if (result.data) {
         setAppointments(result.data);
       }
@@ -330,7 +338,8 @@ export function Appointments() {
     }
 
     // For real appointments, update in database
-    const { error } = await cancelSupabaseAppointment(id);
+    const numericId = typeof id === 'string' ? parseInt(id) : id;
+    const { error } = await cancelSupabaseAppointment(numericId);
     if (error) {
       alert('Failed to cancel appointment: ' + error.message);
       return;
@@ -338,7 +347,7 @@ export function Appointments() {
 
     // Reload appointments
     if (user) {
-      const result = await getCustomerAppointments(user.id);
+      const result = await getCustomerAppointments();
       if (result.data) {
         setAppointments(result.data);
       }
@@ -366,7 +375,8 @@ export function Appointments() {
     if (!rescheduleAppointment) return;
 
     // For now, cancel old and create new
-    await cancelSupabaseAppointment(rescheduleAppointment.id);
+    const aptId = typeof rescheduleAppointment.id === 'string' ? parseInt(rescheduleAppointment.id) : rescheduleAppointment.id;
+    await cancelSupabaseAppointment(aptId);
     await handleBookAppointment(e);
 
     setRescheduleAppointment(null);

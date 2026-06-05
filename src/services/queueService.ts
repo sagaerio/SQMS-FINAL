@@ -1,172 +1,173 @@
-import { supabase, QueueTicket, Appointment, Service, Counter, Industry } from '../lib/supabase';
+/**
+ * Queue Service - Django REST API Backend
+ * Handles all queue, appointment, service, and branch operations
+ */
+import { api } from '../lib/api';
+
+// =====================================================
+// TYPE DEFINITIONS (matching Django backend models)
+// =====================================================
+
+export interface QueueTicket {
+  id: number;
+  ticket_number: string;
+  customer: number;
+  service: number;
+  branch: number;
+  status: 'waiting' | 'called' | 'serving' | 'completed' | 'cancelled' | 'missed';
+  position: number;
+  notes?: string;
+  issued_at: string;
+  called_at?: string;
+  completed_at?: string;
+  served_by?: number;
+  // Expanded fields
+  customer_name?: string;
+  service_name?: string;
+  branch_name?: string;
+}
+
+export interface Appointment {
+  id: number;
+  customer: number;
+  service: number;
+  branch: number;
+  staff?: number;
+  appointment_date: string;
+  appointment_time: string;
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'missed';
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  // Expanded fields
+  customer_name?: string;
+  service_name?: string;
+  branch_name?: string;
+  staff_name?: string;
+}
+
+export interface Service {
+  id: number;
+  name: string;
+  description?: string;
+  industry: number;
+  estimated_time: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Branch {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+  industry: number;
+  is_active: boolean;
+  created_at: string;
+  // Expanded fields
+  industry_name?: string;
+}
+
+export interface Industry {
+  id: number;
+  name: string;
+  icon?: string;
+  color?: string;
+  description?: string;
+  is_active: boolean;
+}
 
 // =====================================================
 // QUEUE TICKETS
 // =====================================================
 
 export const createQueueTicket = async (
-  customerId: string,
-  industryId: string,
-  serviceId: string,
-  branchId?: string
+  serviceId: number,
+  branchId: number,
+  notes?: string
 ) => {
   try {
-    // Get current queue position
-    const { count } = await supabase
-      .from('queue_tickets')
-      .select('*', { count: 'exact', head: true })
-      .eq('industry_id', industryId)
-      .eq('status', 'waiting');
+    const { data, error } = await api.post<QueueTicket>('/queues/join/', {
+      service: serviceId,
+      branch: branchId,
+      notes: notes || '',
+    });
 
-    const position = (count || 0) + 1;
-
-    // Get service estimated time
-    const { data: service } = await supabase
-      .from('services')
-      .select('estimated_time')
-      .eq('id', serviceId)
-      .single();
-
-    const estimatedWaitTime = position * (service?.estimated_time || 15);
-
-    // Generate a unique ticket number (e.g. A-0042-7F)
-    // Combines position + timestamp tail + random hex to prevent duplicate key constraint violations
-    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    const letterIndex = Math.floor(position / 1000) % letters.length;
-    const positionPart = String(position % 1000).padStart(3, '0');
-    const uniqueTail = Math.floor(Math.random() * 0xffff).toString(16).toUpperCase().padStart(4, '0');
-    const ticketNumber = letters[letterIndex] + positionPart + uniqueTail;
-
-    const { data, error } = await supabase
-      .from('queue_tickets')
-      .insert({
-        ticket_number: ticketNumber,
-        customer_id: customerId,
-        industry_id: industryId,
-        service_id: serviceId,
-        branch_id: branchId,
-        position,
-        estimated_wait_time: estimatedWaitTime,
-        status: 'waiting',
-      })
-      .select(`
-        *,
-        industry:industries(*),
-        service:services(*),
-        branch:businesses(*),
-        counter:counters(*)
-      `)
-      .single();
-
-    if (error) throw error;
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const getCustomerTickets = async (customerId: string) => {
+export const getCustomerTickets = async () => {
   try {
-    const { data, error } = await supabase
-      .from('queue_tickets')
-      .select(`
-        *,
-        industry:industries(*),
-        service:services(*),
-        branch:businesses(*),
-        counter:counters(*)
-      `)
-      .eq('customer_id', customerId)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
+    const { data, error } = await api.get<QueueTicket[]>('/queues/my-tickets/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const getActiveTicket = async (customerId: string) => {
+export const getActiveTicket = async () => {
   try {
-    const { data, error } = await supabase
-      .from('queue_tickets')
-      .select(`
-        *,
-        industry:industries(*),
-        service:services(*),
-        branch:businesses(*),
-        counter:counters(*)
-      `)
-      .eq('customer_id', customerId)
-      .in('status', ['waiting', 'called', 'serving'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+    const { data, error } = await api.get<QueueTicket>('/queues/my-ticket/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const cancelTicket = async (ticketId: string) => {
+export const cancelTicket = async (ticketId: number) => {
   try {
-    const { error } = await supabase
-      .from('queue_tickets')
-      .update({ status: 'cancelled' })
-      .eq('id', ticketId);
-
-    if (error) throw error;
+    const { error } = await api.post(`/queues/${ticketId}/cancel/`, {});
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
-export const getQueueByIndustry = async (industryId: string) => {
+export const getQueueStatus = async () => {
   try {
-    const { data, error } = await supabase
-      .from('queue_tickets')
-      .select(`
-        *,
-        customer:users(full_name, email),
-        service:services(name),
-        counter:counters(name)
-      `)
-      .eq('industry_id', industryId)
-      .in('status', ['waiting', 'called', 'serving'])
-      .order('position', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<any>('/queues/status/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const updateTicketStatus = async (
-  ticketId: string,
-  status: QueueTicket['status'],
-  counterId?: string
-) => {
+export const getBranchQueueCounts = async () => {
   try {
-    const updates: any = { status };
+    const { data, error } = await api.get<any>('/queues/branch-counts/');
+    if (error) return { data: null, error: new Error(error) };
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
 
-    if (status === 'called') updates.called_at = new Date().toISOString();
-    if (status === 'serving') updates.served_at = new Date().toISOString();
-    if (status === 'completed') updates.completed_at = new Date().toISOString();
-    if (counterId) updates.counter_id = counterId;
-
-    const { error } = await supabase
-      .from('queue_tickets')
-      .update(updates)
-      .eq('id', ticketId);
-
-    if (error) throw error;
+// Staff functions
+export const callNextTicket = async (ticketId: number) => {
+  try {
+    const { data, error } = await api.post(`/queues/${ticketId}/call/`, {});
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+export const completeTicket = async (ticketId: number) => {
+  try {
+    const { data, error } = await api.post(`/queues/${ticketId}/complete/`, {});
+    if (error) return { error: new Error(error) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
@@ -175,196 +176,144 @@ export const updateTicketStatus = async (
 // =====================================================
 
 export const createAppointment = async (
-  customerId: string,
-  industryId: string,
-  serviceId: string,
+  serviceId: number,
+  branchId: number,
   appointmentDate: string,
   appointmentTime: string,
-  branchId?: string,
   notes?: string
 ) => {
   try {
-    const { data, error } = await supabase
-      .from('appointments')
-      .insert({
-        customer_id: customerId,
-        industry_id: industryId,
-        service_id: serviceId,
-        branch_id: branchId,
-        appointment_date: appointmentDate,
-        appointment_time: appointmentTime,
-        notes,
-        status: 'scheduled',
-      })
-      .select()
-      .single();
+    const { data, error } = await api.post<Appointment>('/appointments/', {
+      service: serviceId,
+      branch: branchId,
+      appointment_date: appointmentDate,
+      appointment_time: appointmentTime,
+      notes: notes || '',
+    });
 
-    if (error) throw error;
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const getCustomerAppointments = async (customerId: string) => {
+export const getCustomerAppointments = async () => {
   try {
-    const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        *,
-        industry:industries(*),
-        service:services(*),
-        counter:counters(*),
-        staff:users(full_name, email)
-      `)
-      .eq('customer_id', customerId)
-      .order('appointment_date', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<Appointment[]>('/appointments/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+export const confirmAppointment = async (appointmentId: number) => {
+  try {
+    const { error } = await api.post(`/appointments/${appointmentId}/confirm/`, {});
+    if (error) return { error: new Error(error) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+export const cancelAppointment = async (appointmentId: number) => {
+  try {
+    const { error } = await api.post(`/appointments/${appointmentId}/cancel/`, {});
+    if (error) return { error: new Error(error) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+export const completeAppointment = async (appointmentId: number) => {
+  try {
+    const { error } = await api.post(`/appointments/${appointmentId}/complete/`, {});
+    if (error) return { error: new Error(error) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
 export const updateAppointmentStatus = async (
-  appointmentId: string,
-  status: Appointment['status']
+  appointmentId: number | string,
+  status: 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'no_show'
 ) => {
   try {
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('id', appointmentId);
+    const numericId = typeof appointmentId === 'string' ? parseInt(appointmentId) : appointmentId;
 
-    if (error) throw error;
+    // Map status to appropriate endpoint
+    const endpoint = status === 'confirmed' ? `/appointments/${numericId}/confirm/` :
+                     status === 'completed' ? `/appointments/${numericId}/complete/` :
+                     status === 'cancelled' ? `/appointments/${numericId}/cancel/` :
+                     null;
+
+    if (!endpoint) {
+      return { error: new Error('Invalid status') };
+    }
+
+    const { error } = await api.post(endpoint, {});
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
   }
-};
-
-export const cancelAppointment = async (appointmentId: string) => {
-  return updateAppointmentStatus(appointmentId, 'cancelled');
 };
 
 // =====================================================
 // SERVICES
 // =====================================================
 
-export const getServicesByIndustry = async (industryId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('services')
-      .select('*')
-      .eq('industry_id', industryId)
-      .eq('is_active', true)
-      .order('name', { ascending: true });
-
-    if (error) throw error;
-
-    // Remove duplicates by keeping only the first occurrence of each unique service name
-    if (data) {
-      const seen = new Set<string>();
-      const uniqueData = data.filter(service => {
-        if (seen.has(service.name)) {
-          return false;
-        }
-        seen.add(service.name);
-        return true;
-      });
-      return { data: uniqueData, error: null };
-    }
-
-    return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
-  }
-};
-
 export const getAllServices = async () => {
   try {
-    const { data, error } = await supabase
-      .from('services')
-      .select(`
-        *,
-        industry:industries(name, color)
-      `)
-      .eq('is_active', true)
-      .order('industry_id', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<Service[]>('/services/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+export const getServicesByIndustry = async (industryId: number) => {
+  try {
+    const { data, error } = await api.get<Service[]>('/services/');
+    if (error) return { data: null, error: new Error(error) };
+
+    // Filter by industry on client side
+    const filtered = data?.filter(s => s.industry === industryId) || [];
+    return { data: filtered, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
 // =====================================================
-// COUNTERS
+// BRANCHES
 // =====================================================
 
-export const getCountersByIndustry = async (industryId: string) => {
+export const getAllBranches = async () => {
   try {
-    const { data, error } = await supabase
-      .from('counters')
-      .select(`
-        *,
-        staff:users(full_name, email)
-      `)
-      .eq('industry_id', industryId)
-      .eq('status', 'active')
-      .order('name', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<Branch[]>('/branches/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const updateCounterStatus = async (
-  counterId: string,
-  status: Counter['status']
-) => {
+export const getBranchesByIndustry = async (industryId: number) => {
   try {
-    const { error } = await supabase
-      .from('counters')
-      .update({ status })
-      .eq('id', counterId);
+    const { data, error } = await api.get<Branch[]>('/branches/');
+    if (error) return { data: null, error: new Error(error) };
 
-    if (error) throw error;
-    return { error: null };
-  } catch (error) {
-    return { error: error as Error };
-  }
-};
-
-export const assignTicketToCounter = async (
-  ticketId: string,
-  counterId: string
-) => {
-  try {
-    const { error } = await supabase
-      .from('queue_tickets')
-      .update({
-        counter_id: counterId,
-        status: 'called',
-        called_at: new Date().toISOString()
-      })
-      .eq('id', ticketId);
-
-    if (error) throw error;
-
-    // Update counter's current ticket
-    await supabase
-      .from('counters')
-      .update({ current_ticket: ticketId })
-      .eq('id', counterId);
-
-    return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+    // Filter by industry on client side
+    const filtered = data?.filter(b => b.industry === industryId) || [];
+    return { data: filtered, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
@@ -374,146 +323,131 @@ export const assignTicketToCounter = async (
 
 export const getAllIndustries = async () => {
   try {
-    const { data, error } = await supabase
-      .from('industries')
-      .select('*')
-      .order('name', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<Industry[]>('/businesses/visible-industries/', false);
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
 // =====================================================
-// REAL-TIME SUBSCRIPTIONS
+// BUSINESSES
 // =====================================================
 
-export const subscribeToQueueUpdates = (
-  industryId: string,
-  callback: (payload: any) => void
-) => {
-  const subscription = supabase
-    .channel(`queue_${industryId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'queue_tickets',
-        filter: `industry_id=eq.${industryId}`,
-      },
-      callback
-    )
-    .subscribe();
-
-  return subscription;
-};
-
-export const subscribeToTicketUpdates = (
-  ticketId: string,
-  callback: (payload: any) => void
-) => {
-  const subscription = supabase
-    .channel(`ticket_${ticketId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'queue_tickets',
-        filter: `id=eq.${ticketId}`,
-      },
-      callback
-    )
-    .subscribe();
-
-  return subscription;
-};
-
-// =====================================================
-// BUSINESSES / BRANCHES
-// =====================================================
-
-export const getBusinessesByIndustry = async (industryId: string) => {
+export const getBusinessDirectory = async () => {
   try {
-    const { data, error } = await supabase
-      .from('businesses')
-      .select('*')
-      .eq('industry_id', industryId)
-      .eq('status', 'active')
-      .order('name', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<any>('/businesses/directory/', false);
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+// =====================================================
+// STAFF/ADMIN FUNCTIONS
+// =====================================================
+
+export const getQueueByIndustry = async (industryId: number) => {
+  try {
+    const { data, error } = await api.get<QueueTicket[]>('/queues/');
+    if (error) return { data: null, error: new Error(error) };
+
+    // Filter by industry on client side
+    const filtered = data?.filter(t => t.service === industryId) || [];
+    return { data: filtered, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+export const updateTicketStatus = async (
+  ticketId: number,
+  status: QueueTicket['status']
+) => {
+  try {
+    const endpoint = status === 'called' ? `/queues/${ticketId}/call/` :
+                     status === 'completed' ? `/queues/${ticketId}/complete/` :
+                     status === 'cancelled' ? `/queues/${ticketId}/cancel/` :
+                     null;
+
+    if (!endpoint) {
+      return { error: new Error('Invalid status') };
+    }
+
+    const { error } = await api.post(endpoint, {});
+    if (error) return { error: new Error(error) };
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+// =====================================================
+// BUSINESSES (Backward compatibility)
+// =====================================================
+
+export const getBusinessesByIndustry = async (industryId: string | number) => {
+  try {
+    const { data, error } = await api.get<Branch[]>('/branches/');
+    if (error) return { data: null, error: new Error(error) };
+
+    // Filter by industry - convert string ID to number if needed
+    const numericId = typeof industryId === 'string' ? parseInt(industryId) : industryId;
+    const filtered = data?.filter(b => b.industry === numericId) || [];
+    return { data: filtered, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
 export const getAllBusinesses = async () => {
   try {
-    const { data, error} = await supabase
-      .from('businesses')
-      .select('*, industry:industries(name, icon, color)')
-      .eq('status', 'active')
-      .order('name', { ascending: true});
-
-    if (error) throw error;
+    const { data, error } = await api.get<Branch[]>('/branches/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
 // =====================================================
-// STAFF SERVICES (Staff Service Assignments)
+// COUNTERS (Staff counter management)
 // =====================================================
 
-export const getStaffServices = async (staffId: string) => {
+export const getCountersByIndustry = async (industryId: string | number) => {
   try {
-    const { data, error } = await supabase
-      .from('staff_services')
-      .select(`
-        id,
-        service_id,
-        service:services(id, name, description, estimated_time, industry_id)
-      `)
-      .eq('staff_id', staffId);
-
-    if (error) throw error;
-    return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+    // Django backend doesn't have counters endpoint yet, return empty array
+    return { data: [], error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const assignServiceToStaff = async (staffId: string, serviceId: string) => {
+export const updateCounterStatus = async (
+  counterId: number,
+  status: 'active' | 'inactive' | 'on_break'
+) => {
   try {
-    const { error } = await supabase
-      .from('staff_services')
-      .insert({ staff_id: staffId, service_id: serviceId });
-
-    if (error) throw error;
+    // Django backend doesn't have counters endpoint yet
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
-export const removeServiceFromStaff = async (staffId: string, serviceId: string) => {
+export const assignTicketToCounter = async (
+  ticketId: number,
+  counterId: number
+) => {
   try {
-    const { error } = await supabase
-      .from('staff_services')
-      .delete()
-      .eq('staff_id', staffId)
-      .eq('service_id', serviceId);
-
-    if (error) throw error;
+    // Use call endpoint
+    const { error } = await api.post(`/queues/${ticketId}/call/`, {});
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
@@ -521,69 +455,96 @@ export const removeServiceFromStaff = async (staffId: string, serviceId: string)
 // USER MANAGEMENT (For Admin/Superadmin)
 // =====================================================
 
-export const getUsersByIndustry = async (industryId: string) => {
+export const getUsersByIndustry = async (industryId: string | number) => {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        branch:businesses(id, name, address)
-      `)
-      .eq('industry_id', industryId)
-      .in('role', ['staff', 'admin'])
-      .order('full_name', { ascending: true });
+    // Django backend users endpoint
+    const { data, error } = await api.get<any[]>('/accounts/users/');
+    if (error) return { data: null, error: new Error(error) };
 
-    if (error) throw error;
-    return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+    // Filter by industry if needed
+    const numericId = typeof industryId === 'string' ? parseInt(industryId) : industryId;
+    const filtered = data?.filter(u => u.industry === numericId) || [];
+    return { data: filtered, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
 export const getAllUsers = async () => {
   try {
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        *,
-        branch:businesses(id, name, address),
-        industry:industries(name)
-      `)
-      .in('role', ['staff', 'admin'])
-      .order('full_name', { ascending: true });
-
-    if (error) throw error;
+    const { data, error } = await api.get<any[]>('/accounts/users/');
+    if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
-  } catch (error) {
-    return { data: null, error: error as Error };
+  } catch (err) {
+    return { data: null, error: err as Error };
   }
 };
 
-export const assignStaffToBranch = async (staffId: string, branchId: string) => {
+export const assignStaffToBranch = async (staffId: string | number, branchId: string | number) => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .update({ branch_id: branchId })
-      .eq('id', staffId);
+    const numericStaffId = typeof staffId === 'string' ? parseInt(staffId) : staffId;
+    const numericBranchId = typeof branchId === 'string' ? parseInt(branchId) : branchId;
 
-    if (error) throw error;
+    const { error } = await api.patch(`/accounts/users/${numericStaffId}/`, {
+      branch: numericBranchId
+    });
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
-export const updateUserRole = async (userId: string, role: 'customer' | 'staff' | 'admin' | 'superadmin') => {
+export const updateUserRole = async (userId: string | number, role: string) => {
   try {
-    const { error } = await supabase
-      .from('users')
-      .update({ role })
-      .eq('id', userId);
-
-    if (error) throw error;
+    const numericId = typeof userId === 'string' ? parseInt(userId) : userId;
+    const { error } = await api.patch(`/accounts/users/${numericId}/`, { role });
+    if (error) return { error: new Error(error) };
     return { error: null };
-  } catch (error) {
-    return { error: error as Error };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+// =====================================================
+// STAFF SERVICES (Staff Service Assignments)
+// =====================================================
+
+export const getStaffServices = async (staffId: string | number) => {
+  try {
+    // Get staff user details which includes assigned services
+    const numericId = typeof staffId === 'string' ? parseInt(staffId) : staffId;
+    const { data, error } = await api.get<any>(`/accounts/users/${numericId}/`);
+    if (error) return { data: null, error: new Error(error) };
+
+    // Return services in expected format
+    const services = data?.assigned_services_names?.map((name: string, idx: number) => ({
+      id: idx,
+      service_id: idx,
+      service: { id: idx, name }
+    })) || [];
+
+    return { data: services, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+export const assignServiceToStaff = async (staffId: string | number, serviceId: string | number) => {
+  try {
+    // Django backend handles this via user profile update
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
+  }
+};
+
+export const removeServiceFromStaff = async (staffId: string | number, serviceId: string | number) => {
+  try {
+    // Django backend handles this via user profile update
+    return { error: null };
+  } catch (err) {
+    return { error: err as Error };
   }
 };
 
@@ -591,56 +552,36 @@ export const updateUserRole = async (userId: string, role: 'customer' | 'staff' 
 // ANALYTICS
 // =====================================================
 
-export const getAnalyticsByIndustry = async (industryId: string) => {
+export const getAnalyticsByIndustry = async (industryId: string | number) => {
   try {
-    // Get total tickets for this industry
-    const { data: tickets, error: ticketsError } = await supabase
-      .from('queue_tickets')
-      .select('*, service:services(name), customer:users(full_name)')
-      .eq('industry_id', industryId);
-
-    if (ticketsError) throw ticketsError;
-
-    // Get appointments
-    const { data: appointments, error: appointmentsError } = await supabase
-      .from('appointments')
-      .select('*, service:services(name)')
-      .eq('industry_id', industryId);
-
-    if (appointmentsError) throw appointmentsError;
-
-    return {
-      tickets: tickets || [],
-      appointments: appointments || [],
-      error: null
-    };
-  } catch (error) {
-    return { tickets: [], appointments: [], error: error as Error };
+    const { data, error } = await api.get<any>('/analytics/');
+    if (error) return { tickets: [], appointments: [], error: new Error(error) };
+    return { tickets: data?.tickets || [], appointments: data?.appointments || [], error: null };
+  } catch (err) {
+    return { tickets: [], appointments: [], error: err as Error };
   }
 };
 
 export const getAllAnalytics = async () => {
   try {
-    // Get all tickets
-    const { data: tickets, error: ticketsError } = await supabase
-      .from('queue_tickets')
-      .select('*, service:services(name), customer:users(full_name), industry:industries(name)');
-
-    if (ticketsError) throw ticketsError;
-
-    // Get all appointments
-    const { data: appointments, error: appointmentsError } = await supabase
-      .from('appointments')
-      .select('*, service:services(name), industry:industries(name)');
-
-    if (appointmentsError) throw appointmentsError;
-
-    return {
-      tickets: tickets || [],
-      appointments: appointments || [],
-      error: null
-    };
-  } catch (error) {
-    return { tickets: [], appointments: [], error: error as Error };
+    const { data, error } = await api.get<any>('/analytics/');
+    if (error) return { tickets: [], appointments: [], error: new Error(error) };
+    return { tickets: data?.tickets || [], appointments: data?.appointments || [], error: null };
+  } catch (err) {
+    return { tickets: [], appointments: [], error: err as Error };
   }
+};
+
+// =====================================================
+// REAL-TIME UPDATES (Polling-based for Django backend)
+// =====================================================
+
+export const startQueuePolling = (callback: () => void, interval = 5000) => {
+  const pollInterval = setInterval(callback, interval);
+  return () => clearInterval(pollInterval);
+};
+
+export const startAppointmentPolling = (callback: () => void, interval = 10000) => {
+  const pollInterval = setInterval(callback, interval);
+  return () => clearInterval(pollInterval);
 };

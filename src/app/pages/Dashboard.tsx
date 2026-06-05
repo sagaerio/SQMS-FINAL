@@ -6,6 +6,7 @@ import {
   CheckCircle2, Clock, MapPin, RefreshCw, ChevronRight,
   Building, ArrowRight, TrendingUp,
 } from 'lucide-react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 function greeting(name: string): string {
   const h = new Date().getHours();
@@ -52,11 +53,11 @@ export function Dashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      const SERVER = import.meta.env.VITE_API_URL;
-      const headers = { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`, 'Content-Type': 'application/json' };
+      const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+      const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
       const [tRes, aRes] = await Promise.all([
-        fetch(`${SERVER}/queues/my-ticket/`, { headers }).catch(() => null),
-        fetch(`${SERVER}/appointments/`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues/my-ticket`, { headers }).catch(() => null),
+        fetch(`${SERVER}/appointments`, { headers }).catch(() => null),
       ]);
       if (tRes?.ok) { const t = await tRes.json().catch(() => null); setActiveTicket(t && ['waiting','called','serving','completed'].includes(t.status) ? t : null); }
       if (aRes?.ok) { const r = await aRes.json().catch(() => []); setAppointments(Array.isArray(r) ? r : r?.results ?? []); }
@@ -69,7 +70,7 @@ export function Dashboard() {
   const totalAppts    = appointments.length;
   const completedAppts = appointments.filter(a => a.status === 'completed').length;
   const upcomingAppts  = appointments.filter(a => ['scheduled','confirmed'].includes(a.status)).length;
-  const nextAppt = appointments.filter(a => ['scheduled','confirmed'].includes(a.status)).sort((a,b) => new Date(`${a.appointment_date}T${a.appointment_time}`).getTime() - new Date(`${b.appointment_date}T${b.appointment_time}`).getTime())[0];
+  const nextAppt = appointments.filter(a => ['scheduled','confirmed'].includes(a.status)).sort((a,b) => new Date(`${a.appointment_date}T${a.appointment_time}`).getTime() - new Date(`${b.appointment_date}T${b.appointment_time}`).getTime())[0] ?? null;
 
   if (!showCustomerView && !authLoading) return null;
 
@@ -88,7 +89,7 @@ export function Dashboard() {
         <button
           onClick={() => { setRefreshing(true); loadData(); }}
           disabled={refreshing}
-          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 700, color: '#475569' }}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', borderRadius: 10, border: '1px solid #e2e8f0', backgroundColor: '#fff', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: '#475569' }}
         >
           <RefreshCw size={16} color="#475569" />
           Refresh
@@ -104,7 +105,7 @@ export function Dashboard() {
         ].map(stat => {
           const Icon = stat.icon;
           return (
-            <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: 16, padding: '24px 24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(15,23,42,0.04)', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+            <div key={stat.label} style={{ backgroundColor: '#fff', borderRadius: 16, padding: '24px 24px', border: '1px solid #e2e8f0', boxShadow: '0 1px 6px rgba(15,23,42,0.04)', display: 'flex', alignItems: 'center', gap: 16 }}>
               <div style={{ width: 52, height: 52, borderRadius: 14, backgroundColor: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <Icon size={24} color={stat.color} />
               </div>
@@ -125,9 +126,7 @@ export function Dashboard() {
         <div style={{ backgroundColor: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
           <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Active Queue</span>
-            <button onClick={() => navigate('/status')} style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-              View all <ChevronRight size={14} />
-            </button>
+            <button onClick={() => navigate('/status')} style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>View status <ChevronRight size={14} /></button>
           </div>
           <div style={{ padding: 24 }}>
             {loading ? (
@@ -165,9 +164,7 @@ export function Dashboard() {
                   <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>No active queue</p>
                   <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>You're not in any queue right now</p>
                 </div>
-                <button onClick={() => navigate('/services')} style={{ padding: '10px 20px', backgroundColor: '#2563eb', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700 }}>
-                  Join a Queue
-                </button>
+                <button onClick={() => navigate('/services')} style={{ padding: '10px 20px', backgroundColor: '#2563eb', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>Join a Queue</button>
               </div>
             )}
           </div>
@@ -177,15 +174,13 @@ export function Dashboard() {
         <div style={{ backgroundColor: '#fff', borderRadius: 20, border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 8px rgba(15,23,42,0.04)' }}>
           <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Next Appointment</span>
-            <button onClick={() => navigate('/appointments')} style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-              View all <ChevronRight size={14} />
-            </button>
+            <button onClick={() => navigate('/appointments')} style={{ fontSize: 12, fontWeight: 700, color: '#2563eb', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>View all <ChevronRight size={14} /></button>
           </div>
           <div style={{ padding: 24 }}>
             {nextAppt ? (
               <div>
                 <div style={{ marginBottom: 16 }}>
-                  <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, backgroundColor: nextAppt.status === 'confirmed' ? '#f0fdf4' : '#eff6ff', color: nextAppt.status === 'confirmed' ? '#059669' : '#2563eb' }}>
+                  <span style={{ display: 'inline-block', padding: '4px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, backgroundColor: nextAppt.status === 'confirmed' ? '#f0fdf4' : '#eff6ff', color: nextAppt.status === 'confirmed' ? '#059669' : '#2563eb', marginBottom: 10 }}>
                     {nextAppt.status === 'confirmed' ? 'Confirmed' : 'Scheduled'}
                   </span>
                   <p style={{ fontSize: 22, fontWeight: 900, color: '#0f172a', margin: 0 }}>{nextAppt.service_name}</p>
@@ -214,9 +209,7 @@ export function Dashboard() {
                   <p style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>No upcoming appointments</p>
                   <p style={{ fontSize: 13, color: '#94a3b8', margin: '4px 0 0' }}>Schedule one when you're ready</p>
                 </div>
-                <button onClick={() => navigate('/appointments')} style={{ padding: '10px 20px', backgroundColor: '#059669', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700 }}>
-                  Book Now
-                </button>
+                <button onClick={() => navigate('/appointments')} style={{ padding: '10px 20px', backgroundColor: '#059669', color: '#fff', borderRadius: 10, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14 }}>Book Appointment</button>
               </div>
             )}
           </div>
@@ -233,7 +226,7 @@ export function Dashboard() {
               <button
                 key={action.label}
                 onClick={() => navigate(action.route)}
-                style={{ backgroundColor: '#fff', borderRadius: 16, padding: '20px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', textAlign: 'left' }}
+                style={{ backgroundColor: '#fff', borderRadius: 16, padding: '20px 20px', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 6px rgba(15,23,42,0.04)', transition: 'box-shadow 0.15s' }}
               >
                 <div style={{ width: 44, height: 44, borderRadius: 12, backgroundColor: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon size={22} color={action.color} />

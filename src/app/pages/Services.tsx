@@ -60,8 +60,8 @@ export function Services() {
           setQueueTicket(JSON.parse(demoTicket));
         }
       } else {
-        // Check Supabase for real users
-        const { data } = await getActiveTicket(user.id);
+        // Check Django backend for real users
+        const { data } = await getActiveTicket();
         setHasActiveTicket(!!data);
         if (data) {
           setQueueTicket(data);
@@ -167,37 +167,20 @@ export function Services() {
 
     setLoading(true);
     try {
-      // Get the real service ID from Supabase
-      let serviceId = selectedService.id;
+      // Convert service ID to number for Django backend
+      const serviceId = typeof selectedService.id === 'string' ? parseInt(selectedService.id) : selectedService.id;
+      const branchId = typeof selectedBranch === 'string' ? parseInt(selectedBranch) : selectedBranch;
 
-      // Check if the service ID is a UUID (real Supabase ID)
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(serviceId);
-
-      if (!isUUID) {
-        // This is a mock ID, try to get the real service from Supabase
-        if (services && services.length > 0) {
-          // Find service by name
-          const realService = services.find(s => s.name === selectedService.name);
-          if (realService) {
-            serviceId = realService.id;
-          } else {
-            alert('Unable to find service. Please try selecting a different service.');
-            setLoading(false);
-            return;
-          }
-        } else {
-          alert('Services not loaded. Please refresh the page and try again.');
-          setLoading(false);
-          return;
-        }
+      if (isNaN(serviceId) || isNaN(branchId)) {
+        alert('Invalid service or branch selected. Please try again.');
+        setLoading(false);
+        return;
       }
 
-      // Create queue ticket in Supabase
+      // Create queue ticket in Django backend
       const { data, error } = await createQueueTicket(
-        user.id,
-        selectedIndustry.id,
         serviceId,
-        selectedBranch
+        branchId
       );
 
       if (error) {
@@ -213,7 +196,7 @@ export function Services() {
         return;
       }
 
-      // Success - ticket created in Supabase
+      // Success - ticket created in Django backend
       setQueueTicket(data);
       setHasActiveTicket(true);
       setStep('confirmation');
@@ -264,7 +247,7 @@ export function Services() {
               {[
                 ['Industry', selectedIndustry?.name],
                 ['Service', selectedService?.name],
-                ['Branch', branches.find(b => b.id === selectedBranch)?.name || 'Selected Branch'],
+                ['Branch', branches.find(b => String(b.id) === String(selectedBranch))?.name || 'Selected Branch'],
                 ['Position', `#${queueTicket.position}`],
                 ['Est. Wait', `${queueTicket.estimated_wait_time} min`],
                 ['Status', queueTicket.status],

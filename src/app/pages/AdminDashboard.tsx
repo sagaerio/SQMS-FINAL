@@ -6,6 +6,7 @@ import {
   HeadphonesIcon, Settings, FileText, Building2, ChevronRight,
   Activity, TrendingUp, ArrowRight, RefreshCw,
 } from 'lucide-react';
+import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 type QueueStats = { waiting: number; serving: number; completed: number; avg_wait: number };
 type QuickAction = { key: string; label: string; sub: string; icon: React.ElementType; color: string; bg: string; border: string; route: string };
@@ -48,14 +49,14 @@ export function AdminDashboard() {
 
   useEffect(() => { const t = setInterval(() => setClock(fmtTime()), 30000); return () => clearInterval(t); }, []);
 
-  const SERVER = `${import.meta.env.VITE_API_URL}`;
-  const hdrs = { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`, 'Content-Type': 'application/json' };
+  const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+  const hdrs = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
 
   const fetchData = useCallback(async () => {
     try {
       const [sRes, nRes] = await Promise.all([
-        fetch(`${SERVER}/queues/status/`, { headers: hdrs }).catch(() => null),
-        fetch(`${SERVER}/notifications/unread-count/`, { headers: hdrs }).catch(() => null),
+        fetch(`${SERVER}/queues/status`, { headers: hdrs }).catch(() => null),
+        fetch(`${SERVER}/notifications/unread-count`, { headers: hdrs }).catch(() => null),
       ]);
       if (sRes?.ok) { const d = await sRes.json().catch(() => null); if (d) setStats(d); }
       if (nRes?.ok) { const d = await nRes.json().catch(() => null); if (d) setUnread(d.count ?? 0); }
@@ -68,7 +69,7 @@ export function AdminDashboard() {
     setSyncing(true);
     setSyncMsg(null);
     try {
-      const res = await fetch(`${SERVER}/sync-data/`, { method: 'POST', headers: hdrs });
+      const res = await fetch(`${SERVER}/sync-data`, { method: 'POST', headers: hdrs });
       const d = await res.json();
       if (res.ok && d.success) {
         setSyncMsg({ ok: true, text: `Synced ${d.synced.industries} industries, ${d.synced.services} services, ${d.synced.branches} branches` });
@@ -90,7 +91,7 @@ export function AdminDashboard() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
 
       {/* Hero banner */}
-      <div style={{ backgroundColor: '#1e40af', borderRadius: 20, padding: '28px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(29,78,216,0.15)' }}>
+      <div style={{ backgroundColor: '#1e40af', borderRadius: 20, padding: '28px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: '0 8px 32px rgba(29,78,216,0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
           <div style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <span style={{ fontSize: 24, fontWeight: 900, color: '#fff' }}>{adminInitials}</span>
@@ -107,10 +108,10 @@ export function AdminDashboard() {
         <div style={{ textAlign: 'right' }}>
           <p style={{ fontSize: 36, fontWeight: 900, color: '#fff', margin: 0, letterSpacing: 1 }}>{clock}</p>
           <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.6)', margin: '4px 0 0' }}>{fmtDate()}</p>
-          <button onClick={() => navigate('/notifications')} style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, border: 'none', backgroundColor: 'rgba(255,255,255,0.2)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+          <button onClick={() => navigate('/notifications')} style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 10, border: 'none', backgroundColor: 'rgba(255,255,255,0.15)', cursor: 'pointer', color: '#fff', fontSize: 13, fontWeight: 600, position: 'relative' }}>
             <Bell size={16} />
             {unread > 0 && `${unread} new`} Notifications
-            {unread > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 900, color: '#fff' }}>{unread}</span>}
+            {unread > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderRadius: 8, backgroundColor: '#e11d48', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: '#fff', border: '2px solid #1e40af' }}>{unread > 9 ? '9+' : unread}</span>}
           </button>
         </div>
       </div>
@@ -127,7 +128,7 @@ export function AdminDashboard() {
           ].map(card => {
             const Icon = card.icon;
             return (
-              <div key={card.label} style={{ backgroundColor: '#fff', borderRadius: 16, padding: '20px 22px', border: `1px solid ${card.border}`, boxShadow: '0 1px 6px rgba(15,23,42,0.04)', display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+              <div key={card.label} style={{ backgroundColor: '#fff', borderRadius: 16, padding: '20px 22px', border: `1px solid ${card.border}`, boxShadow: '0 1px 6px rgba(15,23,42,0.04)', display: 'flex', alignItems: 'center', gap: 16 }}>
                 <div style={{ width: 48, height: 48, borderRadius: 14, backgroundColor: card.iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon size={22} color={card.color} />
                 </div>
@@ -167,7 +168,7 @@ export function AdminDashboard() {
               <button
                 key={action.key}
                 onClick={() => navigate(action.route)}
-                style={{ backgroundColor: '#fff', borderRadius: 16, border: `1px solid ${action.border}`, padding: '20px 22px', display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', textAlign: 'left' }}
+                style={{ backgroundColor: '#fff', borderRadius: 16, border: `1px solid ${action.border}`, padding: '20px 22px', display: 'flex', alignItems: 'flex-start', gap: 14, cursor: 'pointer', textAlign: 'left', boxShadow: '0 1px 6px rgba(15,23,42,0.04)' }}
               >
                 <div style={{ width: 46, height: 46, borderRadius: 14, backgroundColor: action.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                   <Icon size={22} color={action.color} />
@@ -238,7 +239,7 @@ export function AdminDashboard() {
             <button
               onClick={syncData}
               disabled={syncing}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', backgroundColor: syncing ? '#e2e8f0' : '#2563eb', color: syncing ? '#94a3b8' : '#fff', border: 'none', borderRadius: 10, cursor: 'pointer', fontWeight: 700 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px', backgroundColor: syncing ? '#e2e8f0' : '#2563eb', color: syncing ? '#94a3b8' : '#fff', border: 'none', borderRadius: 10, cursor: syncing ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700 }}
             >
               <RefreshCw size={15} style={{ animation: syncing ? 'spin 0.8s linear infinite' : 'none' }} />
               {syncing ? 'Syncing...' : 'Sync Now'}

@@ -1,176 +1,123 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
-import type { QueueTicket } from '../lib/supabase';
-
 /**
- * Real-time hook for queue tickets
+ * Real-time Queue Hooks - Polling-based for Django backend
  * Automatically updates when tickets are created, updated, or deleted
  */
-export function useRealtimeQueue(industryId?: string) {
-  const [tickets, setTickets] = useState<QueueTicket[]>([]);
+import { useEffect, useState } from 'react';
+import { getQueueStatus, getActiveTicket, type QueueTicket } from '../services/queueService';
+
+/**
+ * Real-time hook for queue status
+ * Polls every 5 seconds for updates
+ */
+export function useRealtimeQueue(pollingInterval = 5000) {
+  const [queueData, setQueueData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    let channel: any;
-
-    const setupQueue = async () => {
+    const fetchQueueStatus = async () => {
       try {
-        // Initial fetch with customer, service, and counter data
-        let query = supabase
-          .from('queue_tickets')
-          .select(`
-            *,
-            customer:users!queue_tickets_customer_id_fkey(full_name, email),
-            service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
-            counter:counters(number, name)
-          `)
-          .order('position', { ascending: true });
-
-        if (industryId) {
-          query = query.eq('industry_id', industryId);
+        const { data, error: fetchError } = await getQueueStatus();
+        if (fetchError) {
+          setError(fetchError);
+        } else {
+          setQueueData(data);
+          setError(null);
         }
-
-        const { data, error } = await query;
-        if (error) throw error;
-
-        setTickets(data || []);
         setLoading(false);
-
-        // Subscribe to real-time changes
-        channel = supabase
-          .channel('queue_realtime')
-          .on(
-            'postgres_changes',
-            {
-              event: '*',
-              schema: 'public',
-              table: 'queue_tickets',
-              filter: industryId ? `industry_id=eq.${industryId}` : undefined,
-            },
-            async (payload) => {
-              if (payload.eventType === 'INSERT') {
-                // Fetch the new ticket with customer, service, and counter data
-                const { data: newTicket } = await supabase
-                  .from('queue_tickets')
-                  .select(`
-                    *,
-                    customer:users!queue_tickets_customer_id_fkey(full_name, email),
-                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
-                    counter:counters(number, name)
-                  `)
-                  .eq('id', (payload.new as any).id)
-                  .single();
-
-                if (newTicket) {
-                  setTickets((current) => [...current, newTicket as any]);
-                }
-              } else if (payload.eventType === 'UPDATE') {
-                // Fetch the updated ticket with customer, service, and counter data
-                const { data: updatedTicket } = await supabase
-                  .from('queue_tickets')
-                  .select(`
-                    *,
-                    customer:users!queue_tickets_customer_id_fkey(full_name, email),
-                    service:services!queue_tickets_service_id_fkey(name, description, estimated_time),
-                    counter:counters(number, name)
-                  `)
-                  .eq('id', (payload.new as any).id)
-                  .single();
-
-                if (updatedTicket) {
-                  setTickets((current) =>
-                    current.map((ticket) =>
-                      ticket.id === updatedTicket.id
-                        ? (updatedTicket as any)
-                        : ticket
-                    )
-                  );
-                }
-              } else if (payload.eventType === 'DELETE') {
-                setTickets((current) =>
-                  current.filter((ticket) => ticket.id !== (payload.old as any).id)
-                );
-              }
-            }
-          )
-          .subscribe();
       } catch (err) {
-        console.error('Error setting up queue subscription:', err);
+        setError(err as Error);
         setLoading(false);
       }
     };
 
-    setupQueue();
+    // Initial fetch
+    fetchQueueStatus();
 
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
-      }
-    };
-  }, [industryId]);
+    // Set up polling
+    const interval = setInterval(fetchQueueStatus, pollingInterval);
 
-  return { tickets, loading };
+    return () => clearInterval(interval);
+  }, [pollingInterval]);
+
+  return { queueData, loading, error };
 }
 
 /**
  * Real-time hook for a specific ticket
- * Monitors status changes for a single ticket
+ * Monitors status changes for the current user's active ticket
+ * Polls every 3 seconds for updates
  */
-export function useRealtimeTicket(ticketId: string | null) {
+export function useRealtimeTicket(pollingInterval = 3000) {
   const [ticket, setTicket] = useState<QueueTicket | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!ticketId) {
-      setLoading(false);
-      return;
-    }
-
-    let channel: any;
-
-    const setupTicket = async () => {
+    const fetchTicket = async () => {
       try {
-        // Initial fetch
-        const { data, error } = await supabase
-          .from('queue_tickets')
-          .select('*')
-          .eq('id', ticketId)
-          .single();
-
-        if (error) throw error;
-        setTicket(data);
+        const { data, error: fetchError } = await getActiveTicket();
+        if (fetchError) {
+          setError(fetchError);
+          setTicket(null);
+        } else {
+          setTicket(data);
+          setError(null);
+        }
         setLoading(false);
-
-        // Subscribe to changes for this specific ticket
-        channel = supabase
-          .channel(`ticket_${ticketId}`)
-          .on(
-            'postgres_changes',
-            {
-              event: 'UPDATE',
-              schema: 'public',
-              table: 'queue_tickets',
-              filter: `id=eq.${ticketId}`,
-            },
-            (payload) => {
-              setTicket(payload.new as QueueTicket);
-            }
-          )
-          .subscribe();
       } catch (err) {
-        console.error('Error setting up ticket subscription:', err);
+        setError(err as Error);
         setLoading(false);
       }
     };
 
-    setupTicket();
+    // Initial fetch
+    fetchTicket();
 
-    return () => {
-      if (channel) {
-        supabase.removeChannel(channel);
+    // Set up polling
+    const interval = setInterval(fetchTicket, pollingInterval);
+
+    return () => clearInterval(interval);
+  }, [pollingInterval]);
+
+  return { ticket, loading, error };
+}
+
+/**
+ * Real-time hook for all user tickets (history)
+ * Polls every 10 seconds for updates
+ */
+export function useRealtimeTickets(pollingInterval = 10000) {
+  const [tickets, setTickets] = useState<QueueTicket[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  useEffect(() => {
+    const fetchTickets = async () => {
+      try {
+        const { getCustomerTickets } = await import('../services/queueService');
+        const { data, error: fetchError } = await getCustomerTickets();
+        if (fetchError) {
+          setError(fetchError);
+        } else {
+          setTickets(data || []);
+          setError(null);
+        }
+        setLoading(false);
+      } catch (err) {
+        setError(err as Error);
+        setLoading(false);
       }
     };
-  }, [ticketId]);
 
-  return { ticket, loading };
+    // Initial fetch
+    fetchTickets();
+
+    // Set up polling
+    const interval = setInterval(fetchTickets, pollingInterval);
+
+    return () => clearInterval(interval);
+  }, [pollingInterval]);
+
+  return { tickets, loading, error };
 }

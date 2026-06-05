@@ -19,18 +19,18 @@ export function IndustryProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load industries from Supabase
+    // Load industries from Django backend
     const loadIndustries = async () => {
       const { data, error } = await getAllIndustries();
 
       if (data && data.length > 0) {
-        // Map Supabase industries to component format
+        // Map Django industries to component format (convert number IDs to strings)
         const mappedIndustries: Industry[] = data.map(ind => ({
-          id: ind.id,
+          id: String(ind.id),
           name: ind.name,
           icon: ind.icon as any,
-          color: ind.color,
-          description: ind.description
+          color: ind.color || 'from-blue-600 to-blue-700',
+          description: ind.description || ''
         }));
         setIndustries(mappedIndustries);
       } else {

@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { CheckCircle2, X, Play, Clock, Users, User, RefreshCw, MapPin, Briefcase, Coffee, Activity } from 'lucide-react';
 import { projectId, publicAnonKey } from '/utils/supabase/info';
 
-type QueueTicket = { id: number; ticket_number: string; customer_name: string; service_name: string; branch_name: string; status: string; position: number; estimated_wait: number; issued_at: string; called_at?: string; notes?: string };
+type QueueTicket = { id: number; ticket_number: string; customer_name: string; service_name: string; branch_name: string; status: string; position: number; estimated_wait: number; issued_at: string; called_at: string | null; notes: string };
 type QueueStats = { waiting: number; serving: number; completed: number; avg_wait: number };
 
 function initials(name: string) { return name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase(); }
@@ -32,8 +32,8 @@ export function StaffDashboard() {
 
   useEffect(() => { const id = setInterval(() => setTick(n => n + 1), 1000); return () => clearInterval(id); }, []);
 
-  const SERVER = `${import.meta.env.VITE_API_URL}/queues`;
-  const headers = { Authorization: `Bearer ${localStorage.getItem('access_token') || ''}`, 'Content-Type': 'application/json' };
+  const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+  const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
 
   const fetchData = useCallback(async () => {
     try {
@@ -41,9 +41,9 @@ export function StaffDashboard() {
         if (!res?.ok) return []; const d = await res.json().catch(() => []); return Array.isArray(d) ? d : d?.results ?? [];
       };
       const [wRes, sRes, stRes] = await Promise.all([
-        fetch(`${SERVER}/?status=waiting`, { headers }).catch(() => null),
-        fetch(`${SERVER}/?status=called`, { headers }).catch(() => null),
-        fetch(`${import.meta.env.VITE_API_URL}/queues/status/`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues?status=waiting`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues?status=called`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues/status`, { headers }).catch(() => null),
       ]);
       const [wArr, sArr] = await Promise.all([toArr(wRes), toArr(sRes)]);
       setWaiting(wArr); setServing(sArr[0] ?? null);
@@ -56,18 +56,18 @@ export function StaffDashboard() {
   const handleCall = async (t: QueueTicket) => {
     if (serving || calling !== null) return;
     setCalling(t.id);
-    await fetch(`${SERVER}/${t.id}/call/`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${t.id}/call`, { method: 'POST', headers }).catch(() => null);
     setCalling(null); fetchData();
   };
   const handleComplete = async () => {
     if (!serving || completing) return;
     setCompleting(true); const id = serving.id; setServing(null);
-    await fetch(`${SERVER}/${id}/complete/`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${id}/complete`, { method: 'POST', headers }).catch(() => null);
     setCompleting(false); fetchData();
   };
   const handleCancel = async (t: QueueTicket) => {
     if (!window.confirm(`Cancel ticket ${t.ticket_number}?`)) return;
-    await fetch(`${SERVER}/${t.id}/cancel/`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${t.id}/cancel`, { method: 'POST', headers }).catch(() => null);
     fetchData();
   };
 
@@ -105,7 +105,7 @@ export function StaffDashboard() {
               </div>
               <button
                 onClick={() => setActive(p => !p)}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, border: `1px solid ${active ? '#a7f3d0' : '#fde68a'}`, backgroundColor: active ? '#ecfdf5' : '#fffbeb', cursor: 'pointer' }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 10, border: `1px solid ${active ? '#a7f3d0' : '#fde68a'}`, backgroundColor: active ? '#ecfdf5' : '#fffbeb', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}
               >
                 <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: active ? '#10b981' : '#f59e0b' }} />
                 <span style={{ color: active ? '#065f46' : '#92400e' }}>{active ? 'Active' : 'On Break'}</span>
@@ -140,7 +140,7 @@ export function StaffDashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20 }}>
 
         {/* Currently Serving card */}
-        <div style={{ backgroundColor: active ? '#1e40af' : '#64748b', borderRadius: 20, padding: 28, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', boxShadow: '0 8px 32px rgba(29,78,216,0.15)' }}>
+        <div style={{ backgroundColor: active ? '#1e40af' : '#64748b', borderRadius: 20, padding: 28, display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center', boxShadow: `0 8px 32px rgba(${active ? '29,78,216' : '71,85,105'},0.3)` }}>
           <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: active ? '#34d399' : '#94a3b8' }} />
@@ -158,10 +158,10 @@ export function StaffDashboard() {
               <span style={{ fontSize: 14, color: '#93c5fd', fontWeight: 500, marginBottom: 8 }}>{serving.service_name}</span>
               {!!serving.notes && <span style={{ fontSize: 12, color: '#bfdbfe', fontWeight: 500, backgroundColor: 'rgba(255,255,255,0.1)', padding: '4px 10px', borderRadius: 8 }}>{serving.notes}</span>}
               <div style={{ display: 'flex', gap: 10, marginTop: 16, width: '100%' }}>
-                <button onClick={handleComplete} disabled={completing} style={{ flex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', borderRadius: 10, border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer', padding: '10px' }}>
+                <button onClick={handleComplete} disabled={completing} style={{ flex: 3, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#10b981', borderRadius: 12, padding: '14px 0', border: 'none', cursor: 'pointer', fontSize: 15, fontWeight: 800, color: '#fff', opacity: completing ? 0.6 : 1 }}>
                   <CheckCircle2 size={18} color="#fff" />{completing ? 'Saving…' : 'Complete'}
                 </button>
-                <button onClick={() => handleCancel(serving)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 10, border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5', fontWeight: 700, cursor: 'pointer', padding: '10px' }}>
+                <button onClick={() => handleCancel(serving)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: 'rgba(239,68,68,0.15)', borderRadius: 12, padding: '14px 0', border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer' }}>
                   <X size={16} color="#fca5a5" /><span style={{ fontSize: 14, fontWeight: 700, color: '#fca5a5' }}>Cancel</span>
                 </button>
               </div>
@@ -182,9 +182,9 @@ export function StaffDashboard() {
           <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Waiting Queue</span>
-              <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, backgroundColor: waiting.length > 0 ? '#eff6ff' : '#f1f5f9', color: waiting.length > 0 ? '#1d4ed8' : '#64748b' }}>{waiting.length}</span>
+              <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, backgroundColor: waiting.length > 0 ? '#eff6ff' : '#f1f5f9', color: waiting.length > 0 ? '#1d4ed8' : '#94a3b8' }}>{waiting.length} waiting</span>
             </div>
-            <button onClick={() => fetchData()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', color: '#64748b', cursor: 'pointer', fontWeight: 700 }}>
+            <button onClick={() => fetchData()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 8, border: '1px solid #e2e8f0', backgroundColor: '#f8fafc', cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#64748b' }}>
               <RefreshCw size={13} /> Refresh
             </button>
           </div>
@@ -222,7 +222,7 @@ export function StaffDashboard() {
                     <button
                       onClick={() => handleCall(ticket)}
                       disabled={!active || !!serving || calling !== null}
-                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1px solid #bfdbfe', backgroundColor: !active || !!serving || calling !== null ? '#f1f5f9' : '#eff6ff', color: !active || !!serving || calling !== null ? '#94a3b8' : '#2563eb', cursor: !active || !!serving || calling !== null ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 12 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '6px 10px', borderRadius: 8, border: '1px solid #bfdbfe', backgroundColor: !active || !!serving || calling !== null ? '#f1f5f9' : '#eff6ff', cursor: !active || !!serving || calling !== null ? 'not-allowed' : 'pointer', fontSize: 12, fontWeight: 700, color: !active || !!serving || calling !== null ? '#94a3b8' : '#2563eb' }}
                     >
                       <Play size={12} /> Call
                     </button>

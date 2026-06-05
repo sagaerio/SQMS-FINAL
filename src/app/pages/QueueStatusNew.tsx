@@ -8,9 +8,9 @@ import {
   getActiveTicket,
   getCustomerTickets,
   cancelTicket,
-  subscribeToTicketUpdates
+  type QueueTicket
 } from '../../services/queueService';
-import type { QueueTicket } from '../../lib/supabase';
+import { useRealtimeTicket } from '../../hooks/useRealtimeQueue';
 import { useNavigate } from 'react-router';
 import { safeGetItem, safeSetItem } from '../../lib/storage';
 
@@ -104,58 +104,54 @@ export function QueueStatus() {
     loadTickets();
   }, [user, authLoading, navigate]);
 
-  // Real-time updates for active ticket
+  // Real-time updates for active ticket using polling
+  const { ticket: polledTicket } = useRealtimeTicket(3000);
+
+  // Monitor status changes from polled ticket
   useEffect(() => {
-    if (!activeTicket) return;
+    if (!polledTicket || !activeTicket) return;
 
-    const subscription = subscribeToTicketUpdates(activeTicket.id, (payload) => {
-      if (payload.eventType === 'UPDATE') {
-        const oldStatus = (activeTicket as any)?.status;
-        const newTicket = payload.new as QueueTicket;
-        setActiveTicket(newTicket);
+    const oldStatus = activeTicket.status;
+    const newStatus = polledTicket.status;
 
-        // Show in-app notification for status changes
-        if (newTicket.status === 'called' && oldStatus !== 'called') {
-          const counterInfo = (newTicket as any).counter?.number
-            ? ` at Counter ${(newTicket as any).counter.number}`
-            : '';
-          showNotification(`🎉 Your turn is up! Please proceed${counterInfo}.`, 'success', 10000);
+    // Update active ticket if status changed
+    if (oldStatus !== newStatus) {
+      setActiveTicket(polledTicket);
 
-          // Save notification to history
-          saveNotificationToHistory({
-            message: `You were called${counterInfo}`,
-            timestamp: new Date().toISOString(),
-            type: 'called',
-            read: false
-          });
-        } else if (newTicket.status === 'serving' && oldStatus !== 'serving') {
-          showNotification('✅ You are now being served.', 'success');
+      // Show in-app notification for status changes
+      if (newStatus === 'called' && oldStatus !== 'called') {
+        showNotification('🎉 Your turn is up! Please proceed to the counter.', 'success', 10000);
 
-          // Save notification to history
-          saveNotificationToHistory({
-            message: 'You are now being served',
-            timestamp: new Date().toISOString(),
-            type: 'serving',
-            read: false
-          });
-        } else if (newTicket.status === 'completed' && oldStatus !== 'completed') {
-          showNotification('✨ Service completed. Thank you!', 'success');
+        // Save notification to history
+        saveNotificationToHistory({
+          message: 'You were called',
+          timestamp: new Date().toISOString(),
+          type: 'called',
+          read: false
+        });
+      } else if (newStatus === 'serving' && oldStatus !== 'serving') {
+        showNotification('✅ You are now being served.', 'success');
 
-          // Save notification to history
-          saveNotificationToHistory({
-            message: 'Your service has been completed',
-            timestamp: new Date().toISOString(),
-            type: 'completed',
-            read: false
-          });
-        }
+        // Save notification to history
+        saveNotificationToHistory({
+          message: 'You are now being served',
+          timestamp: new Date().toISOString(),
+          type: 'serving',
+          read: false
+        });
+      } else if (newStatus === 'completed' && oldStatus !== 'completed') {
+        showNotification('✨ Service completed. Thank you!', 'success');
+
+        // Save notification to history
+        saveNotificationToHistory({
+          message: 'Your service has been completed',
+          timestamp: new Date().toISOString(),
+          type: 'completed',
+          read: false
+        });
       }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [activeTicket?.id, saveNotificationToHistory, showNotification]);
+    }
+  }, [polledTicket, activeTicket?.status, saveNotificationToHistory, showNotification]);
 
   const loadTickets = async () => {
     if (!user) return;
@@ -186,10 +182,10 @@ export function QueueStatus() {
         }
       }
 
-      // For real Supabase users
+      // For Django backend users
       const [activeResult, allResult] = await Promise.all([
-        getActiveTicket(user.id),
-        getCustomerTickets(user.id)
+        getActiveTicket(),
+        getCustomerTickets()
       ]);
 
       if (activeResult.data) {
@@ -220,8 +216,9 @@ export function QueueStatus() {
         return;
       }
 
-      // Handle real Supabase user
-      const { error } = await cancelTicket(activeTicket.id);
+      // Handle Django backend user
+      const ticketId = typeof activeTicket.id === 'string' ? parseInt(activeTicket.id) : activeTicket.id;
+      const { error } = await cancelTicket(ticketId);
       if (error) {
         alert('Failed to cancel ticket. Please try again.');
         return;

@@ -15,7 +15,7 @@ import {
   getStaffServices,
   assignServiceToStaff,
   removeServiceFromStaff
-} from '../../services/djangoService';
+} from '../../services/queueService';
 import { User, Business, Service } from '../../lib/supabase';
 
 interface Employee extends User {
