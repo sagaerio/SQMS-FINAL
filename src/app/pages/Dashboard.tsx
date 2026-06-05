@@ -6,7 +6,6 @@ import {
   CheckCircle2, Clock, MapPin, RefreshCw, ChevronRight,
   Building, ArrowRight, TrendingUp,
 } from 'lucide-react';
-import { projectId, publicAnonKey } from '/utils/supabase/info';
 
 function greeting(name: string): string {
   const h = new Date().getHours();
@@ -53,7 +52,7 @@ export function Dashboard() {
 
   const loadData = useCallback(async () => {
     try {
-      const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
+      const SERVER = 'https://smart-queue-app-production.up.railway.app/api';
       const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
       const [tRes, aRes] = await Promise.all([
         fetch(`${SERVER}/queues/my-ticket`, { headers }).catch(() => null),
