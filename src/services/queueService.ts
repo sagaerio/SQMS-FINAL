@@ -29,11 +29,13 @@ export const createQueueTicket = async (
 
     const estimatedWaitTime = position * (service?.estimated_time || 15);
 
-    // Generate ticket number (e.g., A001, A002, B001, etc.)
+    // Generate a unique ticket number (e.g. A-0042-7F)
+    // Combines position + timestamp tail + random hex to prevent duplicate key constraint violations
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const letterIndex = Math.floor(position / 1000) % letters.length;
-    const numberPart = String((position % 1000) + 1).padStart(3, '0');
-    const ticketNumber = letters[letterIndex] + numberPart;
+    const positionPart = String(position % 1000).padStart(3, '0');
+    const uniqueTail = Math.floor(Math.random() * 0xffff).toString(16).toUpperCase().padStart(4, '0');
+    const ticketNumber = letters[letterIndex] + positionPart + uniqueTail;
 
     const { data, error } = await supabase
       .from('queue_tickets')
