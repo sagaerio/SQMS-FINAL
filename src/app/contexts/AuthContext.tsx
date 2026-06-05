@@ -76,15 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('access_token', data.tokens.access);
       localStorage.setItem('refresh_token', data.tokens.refresh);
 
-      const djangoUser: User = {
-        id: String(data.user.id),
-        email: data.user.email,
-        full_name: data.user.full_name || email,
-        role: data.user.role || 'customer',
-        created_at: data.user.date_joined || new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
+      const djangoUser = {
+  ...data.user,
+  id: String(data.user.id),
+  email: data.user.email,
+  full_name: data.user.full_name || email,
+  role: data.user.role || 'customer',
+  created_at: data.user.date_joined || new Date().toISOString(),
+  updated_at: new Date().toISOString()
+} as User;
+      
       setUser(djangoUser);
       localStorage.setItem('sqms_logged_in', 'true');
       localStorage.setItem('sqms_user_email', djangoUser.email);
