@@ -31,8 +31,8 @@ export function StaffDashboard() {
 
   useEffect(() => { const id = setInterval(() => setTick(n => n + 1), 1000); return () => clearInterval(id); }, []);
 
-  const SERVER = `https://${projectId}.supabase.co/functions/v1/make-server-587beb74`;
-  const headers = { Authorization: `Bearer ${publicAnonKey}`, 'Content-Type': 'application/json' };
+ const SERVER = 'https://smart-queue-app-production.up.railway.app/api';
+const headers = { Authorization: 'Bearer ' + (localStorage.getItem('access_token') || ''), 'Content-Type': 'application/json' };
 
   const fetchData = useCallback(async () => {
     try {
@@ -40,9 +40,9 @@ export function StaffDashboard() {
         if (!res?.ok) return []; const d = await res.json().catch(() => []); return Array.isArray(d) ? d : d?.results ?? [];
       };
       const [wRes, sRes, stRes] = await Promise.all([
-        fetch(`${SERVER}/queues?status=waiting`, { headers }).catch(() => null),
-        fetch(`${SERVER}/queues?status=called`, { headers }).catch(() => null),
-        fetch(`${SERVER}/queues/status`, { headers }).catch(() => null),
+        fetch(`${SERVER}/queues/?status=waiting`, { headers }).catch(() => null),
+fetch(`${SERVER}/queues/?status=called`, { headers }).catch(() => null),
+fetch(`${SERVER}/queues/status/`, { headers }).catch(() => null),
       ]);
       const [wArr, sArr] = await Promise.all([toArr(wRes), toArr(sRes)]);
       setWaiting(wArr); setServing(sArr[0] ?? null);
@@ -55,18 +55,18 @@ export function StaffDashboard() {
   const handleCall = async (t: QueueTicket) => {
     if (serving || calling !== null) return;
     setCalling(t.id);
-    await fetch(`${SERVER}/queues/${t.id}/call`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${t.id}/call/`, { method: 'POST', headers }).catch(() => null);
     setCalling(null); fetchData();
   };
   const handleComplete = async () => {
     if (!serving || completing) return;
     setCompleting(true); const id = serving.id; setServing(null);
-    await fetch(`${SERVER}/queues/${id}/complete`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${id}/complete/`, { method: 'POST', headers }).catch(() => null);
     setCompleting(false); fetchData();
   };
   const handleCancel = async (t: QueueTicket) => {
     if (!window.confirm(`Cancel ticket ${t.ticket_number}?`)) return;
-    await fetch(`${SERVER}/queues/${t.id}/cancel`, { method: 'POST', headers }).catch(() => null);
+    await fetch(`${SERVER}/queues/${t.id}/cancel/`, { method: 'POST', headers }).catch(() => null);
     fetchData();
   };
 
