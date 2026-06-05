@@ -267,24 +267,66 @@ export const updateAppointmentStatus = async (
 // SERVICES
 // =====================================================
 
+export const seedServices = async () => {
+  try {
+    const { data, error } = await api.post<any>('/services/seed/', {});
+    if (error) return { data: null, error: new Error(error) };
+    return { data: data?.services || [], error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
 export const getAllServices = async () => {
   try {
     const { data, error } = await api.get<Service[]>('/services/');
+
     if (error) return { data: null, error: new Error(error) };
+
+    // If no services exist, seed them
+    if (!data || data.length === 0) {
+      console.log('No services found, seeding...');
+      const { data: seedData } = await seedServices();
+      return { data: seedData, error: null };
+    }
+
     return { data, error: null };
   } catch (err) {
     return { data: null, error: err as Error };
   }
 };
 
-export const getServicesByIndustry = async (industryId: number) => {
+export const getServicesByIndustry = async (industryId: number | string) => {
   try {
-    const { data, error } = await api.get<Service[]>('/services/');
+    // Try with industry query param first
+    const industryKey = typeof industryId === 'number' ? String(industryId) : industryId;
+    const { data, error } = await api.get<any[]>(`/services/?industry=${industryKey}`);
+
     if (error) return { data: null, error: new Error(error) };
 
-    // Filter by industry on client side
-    const filtered = data?.filter(s => s.industry === industryId) || [];
-    return { data: filtered, error: null };
+    // If no services exist, seed them
+    if (!data || data.length === 0) {
+      console.log('No services found for industry, seeding...');
+      const { data: seedData } = await seedServices();
+      if (seedData) {
+        // Map industry string keys
+        const industryMap: { [key: string]: string } = {
+          'banking': 'banking',
+          'healthcare': 'healthcare',
+          'retail': 'retail',
+          'government': 'government',
+          'education': 'education',
+          'corporate': 'corporate'
+        };
+
+        const filtered = seedData.filter((s: any) =>
+          s.industry === industryMap[industryKey] || s.industry === industryKey
+        );
+        return { data: filtered, error: null };
+      }
+    }
+
+    return { data, error: null };
   } catch (err) {
     return { data: null, error: err as Error };
   }
@@ -297,6 +339,16 @@ export const getServicesByIndustry = async (industryId: number) => {
 export const getAllBranches = async () => {
   try {
     const { data, error } = await api.get<Branch[]>('/branches/');
+    if (error) return { data: null, error: new Error(error) };
+    return { data, error: null };
+  } catch (err) {
+    return { data: null, error: err as Error };
+  }
+};
+
+export const seedBranches = async () => {
+  try {
+    const { data, error } = await api.post<Branch[]>('/branches/seed/', {});
     if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
   } catch (err) {
@@ -390,12 +442,51 @@ export const updateTicketStatus = async (
 
 export const getBusinessesByIndustry = async (industryId: string | number) => {
   try {
-    const { data, error } = await api.get<Branch[]>('/branches/');
+    // First try to get all branches
+    const { data, error } = await api.get<any[]>('/branches/');
+
     if (error) return { data: null, error: new Error(error) };
 
-    // Filter by industry - convert string ID to number if needed
-    const numericId = typeof industryId === 'string' ? parseInt(industryId) : industryId;
-    const filtered = data?.filter(b => b.industry === numericId) || [];
+    // If no branches exist, seed them
+    if (!data || data.length === 0) {
+      console.log('No branches found, seeding...');
+      const { data: seedData } = await seedBranches();
+      if (seedData && seedData.length > 0) {
+        // Map industry string to filter
+        const industryMap: { [key: string]: string } = {
+          'banking': 'banking',
+          'healthcare': 'healthcare',
+          'retail': 'retail',
+          'government': 'government',
+          'education': 'education',
+          'corporate': 'corporate'
+        };
+
+        const industryKey = typeof industryId === 'string' ? industryId : String(industryId);
+        const filtered = seedData.filter((b: any) =>
+          b.business_industry === industryMap[industryKey] ||
+          b.business_industry === industryKey
+        );
+        return { data: filtered, error: null };
+      }
+    }
+
+    // Filter branches by industry
+    const industryMap: { [key: string]: string } = {
+      'banking': 'banking',
+      'healthcare': 'healthcare',
+      'retail': 'retail',
+      'government': 'government',
+      'education': 'education',
+      'corporate': 'corporate'
+    };
+
+    const industryKey = typeof industryId === 'string' ? industryId : String(industryId);
+    const filtered = data?.filter((b: any) =>
+      b.business_industry === industryMap[industryKey] ||
+      b.business_industry === industryKey
+    ) || [];
+
     return { data: filtered, error: null };
   } catch (err) {
     return { data: null, error: err as Error };
@@ -457,13 +548,12 @@ export const assignTicketToCounter = async (
 
 export const getUsersByIndustry = async (industryId: string | number) => {
   try {
-    // Django backend users endpoint
-    const { data, error } = await api.get<any[]>('/accounts/users/');
+    // Django backend employees endpoint (staff/admin only)
+    const { data, error } = await api.get<any[]>('/accounts/employees/');
     if (error) return { data: null, error: new Error(error) };
 
-    // Filter by industry if needed
-    const numericId = typeof industryId === 'string' ? parseInt(industryId) : industryId;
-    const filtered = data?.filter(u => u.industry === numericId) || [];
+    // Filter by industry/business if needed
+    const filtered = data?.filter(u => u.role === 'staff' || u.role === 'admin') || [];
     return { data: filtered, error: null };
   } catch (err) {
     return { data: null, error: err as Error };
@@ -472,7 +562,8 @@ export const getUsersByIndustry = async (industryId: string | number) => {
 
 export const getAllUsers = async () => {
   try {
-    const { data, error } = await api.get<any[]>('/accounts/users/');
+    // Get all employees (staff, admin, superadmin)
+    const { data, error } = await api.get<any[]>('/accounts/employees/');
     if (error) return { data: null, error: new Error(error) };
     return { data, error: null };
   } catch (err) {
@@ -485,8 +576,8 @@ export const assignStaffToBranch = async (staffId: string | number, branchId: st
     const numericStaffId = typeof staffId === 'string' ? parseInt(staffId) : staffId;
     const numericBranchId = typeof branchId === 'string' ? parseInt(branchId) : branchId;
 
-    const { error } = await api.patch(`/accounts/users/${numericStaffId}/`, {
-      branch: numericBranchId
+    const { error } = await api.patch(`/accounts/employees/${numericStaffId}/`, {
+      assigned_branch: numericBranchId
     });
     if (error) return { error: new Error(error) };
     return { error: null };
@@ -498,7 +589,7 @@ export const assignStaffToBranch = async (staffId: string | number, branchId: st
 export const updateUserRole = async (userId: string | number, role: string) => {
   try {
     const numericId = typeof userId === 'string' ? parseInt(userId) : userId;
-    const { error } = await api.patch(`/accounts/users/${numericId}/`, { role });
+    const { error } = await api.patch(`/accounts/employees/${numericId}/`, { role });
     if (error) return { error: new Error(error) };
     return { error: null };
   } catch (err) {
@@ -514,7 +605,7 @@ export const getStaffServices = async (staffId: string | number) => {
   try {
     // Get staff user details which includes assigned services
     const numericId = typeof staffId === 'string' ? parseInt(staffId) : staffId;
-    const { data, error } = await api.get<any>(`/accounts/users/${numericId}/`);
+    const { data, error } = await api.get<any>(`/accounts/employees/${numericId}/`);
     if (error) return { data: null, error: new Error(error) };
 
     // Return services in expected format
