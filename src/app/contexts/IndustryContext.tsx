@@ -25,13 +25,16 @@ export function IndustryProvider({ children }: { children: ReactNode }) {
 
       if (data && data.length > 0) {
         // Map Django industries to component format (convert number IDs to strings)
-        const mappedIndustries: Industry[] = data.map(ind => ({
-          id: String(ind.id),
-          name: ind.name,
-          icon: ind.icon as any,
-          color: ind.color || 'from-blue-600 to-blue-700',
-          description: ind.description || ''
-        }));
+        const mappedIndustries: Industry[] = data.map(ind => {
+          const fallback = fallbackIndustries.find(f => f.name.toLowerCase().includes(ind.name.toLowerCase())) || fallbackIndustries[0];
+          return {
+            id: String(ind.id),
+            name: ind.name,
+            icon: fallback.icon,
+            color: ind.color || fallback.color || 'from-blue-600 to-blue-700',
+            description: ind.description || fallback.description || ''
+          };
+        });
         setIndustries(mappedIndustries);
       } else {
         // Use fallback if no industries in database

@@ -22,8 +22,8 @@ import type { Service } from '../components/ServiceSelection';
 import { QRCodeSVG } from 'qrcode.react';
 import { createQueueTicket, getActiveTicket, getServicesByIndustry, getBusinessesByIndustry } from '../../services/queueService';
 import type { QueueTicket, Business } from '../../lib/supabase';
-import { industries } from '../components/IndustrySelector';
 import type { Industry } from '../components/IndustrySelector';
+import { useIndustry } from '../contexts/IndustryContext';
 
 export function Services() {
   const [step, setStep] = useState<'industry' | 'service' | 'branch' | 'confirmation'>('industry');
@@ -37,7 +37,7 @@ export function Services() {
   const [branches, setBranches] = useState<Business[]>([]);
   const [loadingServices, setLoadingServices] = useState(false);
   const [loadingBranches, setLoadingBranches] = useState(false);
-  const { setIndustry } = useIndustry();
+  const { industries, setIndustry } = useIndustry();
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 

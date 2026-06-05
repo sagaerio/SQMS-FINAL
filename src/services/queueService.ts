@@ -298,8 +298,20 @@ export const getAllServices = async () => {
 
 export const getServicesByIndustry = async (industryId: number | string) => {
   try {
+    let numericIndustryId = industryId;
+
+    if (typeof industryId === 'string' && isNaN(Number(industryId))) {
+      const { data: indData } = await api.get<any[]>('/businesses/visible-industries/', false);
+      if (indData) {
+        const matchingInd = indData.find((ind: any) => ind.name.toLowerCase() === industryId.toLowerCase() || ind.id.toString() === industryId);
+        if (matchingInd) {
+          numericIndustryId = matchingInd.id;
+        }
+      }
+    }
+
     // Try with industry query param first
-    const industryKey = typeof industryId === 'number' ? String(industryId) : industryId;
+    const industryKey = typeof numericIndustryId === 'number' ? String(numericIndustryId) : numericIndustryId;
     const { data, error } = await api.get<any[]>(`/services/?industry=${industryKey}`);
 
     if (error) return { data: null, error: new Error(error) };
@@ -309,24 +321,27 @@ export const getServicesByIndustry = async (industryId: number | string) => {
       console.log('No services found for industry, seeding...');
       const { data: seedData } = await seedServices();
       if (seedData) {
-        // Map industry string keys
-        const industryMap: { [key: string]: string } = {
-          'banking': 'banking',
-          'healthcare': 'healthcare',
-          'retail': 'retail',
-          'government': 'government',
-          'education': 'education',
-          'corporate': 'corporate'
-        };
-
         const filtered = seedData.filter((s: any) =>
-          s.industry === industryMap[industryKey] || s.industry === industryKey
+          s.industry === industryKey ||
+          String(s.industry) === industryKey ||
+          String(s.industry) === String(industryId) ||
+          (typeof industryId === 'string' && s.industry === industryId)
         );
         return { data: filtered, error: null };
       }
     }
 
-    return { data, error: null };
+    // Filter data if backend didn't filter it
+    const filteredData = data.filter((s: any) => 
+      s.industry === industryKey ||
+      String(s.industry) === industryKey ||
+      String(s.industry) === String(industryId) ||
+      (typeof industryId === 'string' && s.industry === industryId) ||
+      s.industry_name === industryKey ||
+      s.industry_name === industryId
+    );
+
+    return { data: filteredData.length > 0 ? filteredData : data, error: null };
   } catch (err) {
     return { data: null, error: err as Error };
   }
@@ -442,8 +457,21 @@ export const updateTicketStatus = async (
 
 export const getBusinessesByIndustry = async (industryId: string | number) => {
   try {
+    let numericIndustryId = industryId;
+    
     // First try to get all branches
     const { data, error } = await api.get<any[]>('/branches/');
+
+    // Fetch industries to map string name to numeric ID dynamically
+    if (typeof industryId === 'string' && isNaN(Number(industryId))) {
+      const { data: indData } = await api.get<any[]>('/businesses/visible-industries/', false);
+      if (indData) {
+        const matchingInd = indData.find((ind: any) => ind.name.toLowerCase() === industryId.toLowerCase() || ind.id.toString() === industryId);
+        if (matchingInd) {
+          numericIndustryId = matchingInd.id;
+        }
+      }
+    }
 
     if (error) return { data: null, error: new Error(error) };
 
@@ -452,39 +480,25 @@ export const getBusinessesByIndustry = async (industryId: string | number) => {
       console.log('No branches found, seeding...');
       const { data: seedData } = await seedBranches();
       if (seedData && seedData.length > 0) {
-        // Map industry string to filter
-        const industryMap: { [key: string]: string } = {
-          'banking': 'banking',
-          'healthcare': 'healthcare',
-          'retail': 'retail',
-          'government': 'government',
-          'education': 'education',
-          'corporate': 'corporate'
-        };
-
-        const industryKey = typeof industryId === 'string' ? industryId : String(industryId);
+        const industryKey = typeof numericIndustryId === 'string' ? numericIndustryId : String(numericIndustryId);
         const filtered = seedData.filter((b: any) =>
-          b.business_industry === industryMap[industryKey] ||
-          b.business_industry === industryKey
+          b.business_industry === industryKey ||
+          String(b.industry) === industryKey ||
+          String(b.industry) === String(industryId) ||
+          b.industry_name === industryKey ||
+          (typeof industryId === 'string' && b.business_industry === industryId)
         );
         return { data: filtered, error: null };
       }
     }
 
-    // Filter branches by industry
-    const industryMap: { [key: string]: string } = {
-      'banking': 'banking',
-      'healthcare': 'healthcare',
-      'retail': 'retail',
-      'government': 'government',
-      'education': 'education',
-      'corporate': 'corporate'
-    };
-
-    const industryKey = typeof industryId === 'string' ? industryId : String(industryId);
+    const industryKey = typeof numericIndustryId === 'string' ? numericIndustryId : String(numericIndustryId);
     const filtered = data?.filter((b: any) =>
-      b.business_industry === industryMap[industryKey] ||
-      b.business_industry === industryKey
+      b.business_industry === industryKey ||
+      String(b.industry) === industryKey ||
+      String(b.industry) === String(industryId) ||
+      b.industry_name === industryKey ||
+      (typeof industryId === 'string' && b.business_industry === industryId)
     ) || [];
 
     return { data: filtered, error: null };
